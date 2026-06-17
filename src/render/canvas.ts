@@ -1,7 +1,7 @@
 // Canvas renderer. Black background, white wireframe, text-only cell contents, viewport culling.
 
 import type { Snapshot } from './snapshot';
-import { type Viewport, cellSize, visibleCellRange } from './viewport';
+import { type Viewport, viewTransform, visibleCellRange } from './viewport';
 import { formatNumber, formatCell } from './format';
 
 export type ViewMode = 'peoples' | 'food' | 'raw';
@@ -21,13 +21,25 @@ export function draw(
   vp: Viewport,
   mode: ViewMode,
 ): void {
-  const cs = cellSize(vp);
   const cw = ctx.canvas.width;
   const ch = ctx.canvas.height;
+  const t = viewTransform(vp, cw, ch, snap);
+  const cs = t.cs;
   ctx.fillStyle = '#000';
   ctx.fillRect(0, 0, cw, ch);
 
   const { x0, y0, x1, y1 } = visibleCellRange(vp, cw, ch, snap);
+
+  // Clip everything to the actual map rectangle so nothing (cells or grid) draws out of bounds;
+  // the area beyond the map extent stays solid black.
+  const mapLeft = t.ox;
+  const mapTop = t.oy;
+  const mapRight = t.ox + snap.width * cs;
+  const mapBottom = t.oy + snap.height * cs;
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(mapLeft, mapTop, mapRight - mapLeft, mapBottom - mapTop);
+  ctx.clip();
 
   const fontPx = Math.max(7, Math.floor(cs * 0.38));
   ctx.font = `${fontPx}px ${FONT_FAMILY}`;
@@ -50,8 +62,8 @@ export function draw(
   for (let y = y0; y < y1; y++) {
     for (let x = x0; x < x1; x++) {
       const i = y * snap.width + x;
-      const sx = (x - vp.camX) * cs;
-      const sy = (y - vp.camY) * cs;
+      const sx = t.ox + x * cs;
+      const sy = t.oy + y * cs;
 
       if (!snap.discovered[i]) continue; // fog: undiscovered cells are blank
 
@@ -82,21 +94,23 @@ export function draw(
     }
   }
 
-  // white wireframe grid
+  // white wireframe grid — only within the map extent (clip already enforces this, but we also
+  // bound the line spans to the map rectangle so they never run edge-to-edge across black).
   ctx.strokeStyle = 'rgba(255,255,255,0.12)';
   ctx.lineWidth = 1;
   ctx.beginPath();
   for (let x = x0; x <= x1; x++) {
-    const sx = Math.floor((x - vp.camX) * cs) + 0.5;
-    ctx.moveTo(sx, 0);
-    ctx.lineTo(sx, ch);
+    const sx = Math.floor(t.ox + x * cs) + 0.5;
+    ctx.moveTo(sx, mapTop);
+    ctx.lineTo(sx, mapBottom);
   }
   for (let y = y0; y <= y1; y++) {
-    const sy = Math.floor((y - vp.camY) * cs) + 0.5;
-    ctx.moveTo(0, sy);
-    ctx.lineTo(cw, sy);
+    const sy = Math.floor(t.oy + y * cs) + 0.5;
+    ctx.moveTo(mapLeft, sy);
+    ctx.lineTo(mapRight, sy);
   }
   ctx.stroke();
+  ctx.restore();
 }
 
 function drawLabel(
