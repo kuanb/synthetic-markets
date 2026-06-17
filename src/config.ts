@@ -47,7 +47,7 @@ export const CONFIG = {
   MAX_PERSONS: 80_000,
 
   // policy defaults (player starting slider positions)
-  LABOR_TO_FOOD_DEFAULT: 0.5, // labor: food vs mining (raw = 1 - this)
+  LABOR_TO_FOOD_DEFAULT: 0.95, // labor: food vs mining (raw = 1 - this)
   // Three-way raw allocation defaults (MUST sum to 1). Disposition of a market's MINABLE raw:
   //   market -> goods, tech -> research, unmined -> banks in rawStock ("pay dirt" reserve).
   // Low tech share by default so advancing is a deliberate strategic investment, not automatic.
