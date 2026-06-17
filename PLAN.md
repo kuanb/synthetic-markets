@@ -272,12 +272,15 @@ export const CONFIG = {
   FOOD_TECH_MULTIPLIER: 1.0,         // foodExt(level) = ^level; 1.0 = food land-limited (NOT ext)
   RESEARCH_C0: 100, RESEARCH_R: 1.30,// cost(level) = C0 * r^level   (raised from 10 / 1.18)
   // desire / propensity
-  DESIRE_GROWTH_K: 0.02,             // step 8: desire += k * (capitalWealth/population)
-  DESIRE_CAP: 1_000_000,             // soft ceiling: consumption can outrun goods in rich stasis
+  DESIRE_GROWTH_K: 0.1,              // step 8: EASING rate toward aspiration (per-capita goods flow)
+  DESIRE_SUPPLY_FRAC: 0.5,           // aspiration targets this fraction of per-capita goods produced
+  GOODS_DEATH_MAX_FRAC: 0.1,         // max fraction of pop a goods shortfall may kill per year
+  DESIRE_CAP: 1_000_000,             // soft ceiling (rarely binds now)
   PROPENSITY_RISE: 0.15,             // step 10 on local food deficit
   PROPENSITY_DECAY: 0.10,            // step 10 otherwise
   BURST_DECAY: 0.7, BURST_BUMP: 0.5,
-  // early-game player safety net (AI + wild unaffected)
+  // early-game player safety net (AI + wild unaffected); floor RAMPS from PLAYER_SAFE_FLOOR at
+  // year 0 down to 0 at PLAYER_SAFE_YEARS (no mortality cliff when the window ends)
   PLAYER_SAFE_YEARS: 40, PLAYER_SAFE_FLOOR: 5,
   PLAYER_START_FOOD: 10, PLAYER_START_NEIGHBOR_FOOD_MIN: 6,
   // conflict
@@ -559,16 +562,22 @@ For each year (repeat up to N times):
   6. FOOD DEATHS if food < population: kill (population - food) DISTINCT persons of this market,
                     chosen uniformly at random across its live persons (killPerson on each).
                     market.diedThisYear += killed. (Leftover food discarded — perishable.)
-  7. GOODS CONSUMPTION + DEATHS
+  7. GOODS CONSUMPTION + DEATHS  (GENTLE; food is the primary constraint)
+                    available = capitalWealth (prior savings + this cycle's goods)
                     need = population * desireToConsume
-                    draw = min(need, capitalWealth);  capitalWealth -= draw
-                    goodsConsumedThisCycle = draw
+                    draw = min(need, available);  capitalWealth -= draw; goodsConsumedThisCycle = draw
                     if draw < need and need > 0:
                        shortfallFrac = (need - draw) / need
-                       kill round(population * shortfallFrac) DISTINCT persons at random.
-                       market.diedThisYear += killed.   [BALANCE RISK — see §9]
-  8. DESIRE UPDATE desireToConsume = min(DESIRE_CAP,
-                       desireToConsume + DESIRE_GROWTH_K * (capitalWealth / max(1, population)))
+                       kill = round(population * shortfallFrac), CAPPED at GOODS_DEATH_MAX_FRAC of
+                              population per year (gradual decadence, never an instant wipe).
+                       record foodDeaths/goodsDeaths split + per-turn supply/demand (for the UI).
+  8. DESIRE UPDATE [DEFAULT v3 — fixes the early goods die-off] desire EASES toward a fraction of
+                    per-capita goods THROUGHPUT (flow), not accumulated capital (stock):
+                      aspiration = DESIRE_SUPPLY_FRAC * (goodsProducedThisCycle / max(1,population))
+                      desireToConsume += DESIRE_GROWTH_K * (aspiration - desireToConsume)   (>=0, <=DESIRE_CAP)
+                    With DESIRE_SUPPLY_FRAC < 1 the surplus accrues as capital (wealth explosion
+                    preserved) and steady production covers consumption, so desire can no longer
+                    ratchet off a hoarded pile and mass-starve the market.
   9. MOVEMENT    sim/agents.moveIntents -> per-person intents; resolve each via
                     sim/conflict.resolveMove (fog reveal + absorption + conflict, §5.4/§5.5).
  10. PROPENSITY  per person: if its current cell had a food deficit this year
@@ -702,10 +711,18 @@ Plus **Years per turn** — exactly **three** options: **10 / 50 / 250** (defaul
 posts `{type:'TICK', years}` and redraws on `SNAPSHOT`.
 
 **Sidebar live stats:** Year, current tech name + research progress
-(`techProgress / researchCost(next)`), population, cumulative dead, **deaths this turn**
-(`diedThisTurn`, summed across all simulated years of the most recent End Turn batch), market
-size (cells), Capital Wealth, goods produced/cycle, goods consumed/capita
-(`goodsConsumedThisCycle / population`), current `orientation`. Large numbers via `formatNumber`.
+(`techProgress / researchCost(next)`), population, market size (cells), Capital Wealth, goods
+produced/cycle, goods consumed/capita, current `orientation`, plus a **supply/demand + deaths
+panel** (all per-turn totals across the most recent End Turn batch, so a 50-year turn sums 50
+years — chosen as the most legible aggregate):
+- **Food req / produced** — `foodNeededThisTurn` (= Σ population, 1 food/person/cycle) vs
+  `foodProducedThisTurn`.
+- **Goods req / available** — `goodsNeededThisTurn` (= Σ population×desireToConsume) vs
+  `goodsAvailableThisTurn` (= Σ prior capital + that cycle's goods).
+- **Deaths — food (turn)** and **Deaths — goods (turn)** — split by cause, with cumulative
+  totals in parentheses; plus **Deaths — total (turn)** and **Deaths (cumulative)**.
+This makes the cause of any die-off (food vs goods/desire starvation) immediately visible.
+Large numbers via `formatNumber`.
 
 **Start condition.** Player market id 0 = 1 cell, 10 discrete persons, placed ≥10 cells from
 every edge. First researchable tech = the Hoe (level 1).
