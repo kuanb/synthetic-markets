@@ -1,6 +1,7 @@
 // Authoritative WorldState: Land SoA + discrete Person SoA pool + Markets, plus accessors.
 
 import { CONFIG, RNG_SALT } from '../config';
+import { visionRadius } from '../sim/tech';
 import { generateTerrain } from './terrain';
 import { makeRng, type RngState } from './rng';
 import {
@@ -335,29 +336,44 @@ function reveal(s: WorldState, cell: number): void {
   }
 }
 
-// Reveal fog around all player-owned cells (8-neighborhood), so any market the player is
-// adjacent to becomes visible on the map with its live person count + color. Records any rival
-// market whose territory is newly revealed into s.encounteredMarkets (drives encounter events).
+// Reveal fog within the player's tech-scaled SIGHT radius of its territory, so nearby markets
+// become visible on the map with their live person count + color. The radius grows with technology
+// (sim/tech.ts visionRadius) up to whole-map coverage by the Satellites tech. For performance with
+// large radii + large territories, we reveal the territory's bounding box expanded by the radius
+// (clamped to the map) — O(revealed area), never O(cells * radius^2). Records any rival market
+// whose territory is newly revealed into s.encounteredMarkets (drives encounter events).
 export function revealPlayerVision(s: WorldState): void {
   const player = s.markets[0];
-  if (!player) return;
+  if (!player || player.cells.size === 0) return;
   const W = s.width;
   const H = s.height;
+  const r = visionRadius(player.techLevel, Math.max(W, H));
+
+  let minX = W;
+  let minY = H;
+  let maxX = -1;
+  let maxY = -1;
   for (const cell of player.cells) {
     const x = cell % W;
     const y = (cell / W) | 0;
-    for (let dy = -1; dy <= 1; dy++) {
-      const ny = y + dy;
-      if (ny < 0 || ny >= H) continue;
-      for (let dx = -1; dx <= 1; dx++) {
-        const nx = x + dx;
-        if (nx < 0 || nx >= W) continue;
-        const nc = ny * W + nx;
-        if (s.discovered[nc] === 1) continue; // already seen
-        s.discovered[nc] = 1;
-        const owner = s.marketId[nc];
-        if (owner >= 1) s.encounteredMarkets.add(owner); // owner 0 is the player; -1 is unowned
-      }
+    if (x < minX) minX = x;
+    if (x > maxX) maxX = x;
+    if (y < minY) minY = y;
+    if (y > maxY) maxY = y;
+  }
+
+  const x0 = Math.max(0, minX - r);
+  const x1 = Math.min(W - 1, maxX + r);
+  const y0 = Math.max(0, minY - r);
+  const y1 = Math.min(H - 1, maxY + r);
+  for (let y = y0; y <= y1; y++) {
+    const row = y * W;
+    for (let x = x0; x <= x1; x++) {
+      const nc = row + x;
+      if (s.discovered[nc] === 1) continue; // already seen
+      s.discovered[nc] = 1;
+      const owner = s.marketId[nc];
+      if (owner >= 1) s.encounteredMarkets.add(owner); // owner 0 is the player; -1 is unowned
     }
   }
 }

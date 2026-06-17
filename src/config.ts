@@ -48,7 +48,12 @@ export const CONFIG = {
   LABOR_CAPACITY: 2,
   MOBILITY: 1,
   BIRTH_RATE: 0.1,
-  VIEW_RANGE: 1,
+  VIEW_RANGE: 1, // per-person MIGRATION-target search range (movement), not map sight
+  // Fog-of-war SIGHT: reveal radius (cells) around the player's territory grows with technology —
+  // at least VISION_PER_LEVEL per tech level, ramping to the full map by the Satellites tech so the
+  // whole map is visible by then. (See sim/tech.ts visionRadius.)
+  VISION_BASE: 1, // sight radius at tech 0 (the original 1-cell reveal)
+  VISION_PER_LEVEL: 1, // minimum added sight radius per tech level
   // Discrete-agent model: several per-tick passes (births, movement, propensity) are O(live pool).
   // Cap bounds per-turn latency + memory. ~70k live at gen on 300x300; headroom for growth before
   // the cap binds (population trends DOWN over a long run as crowded markets shed/starve).
