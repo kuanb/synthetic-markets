@@ -35,6 +35,19 @@ function resetAccumulators(m: Market): void {
   m.techInvestedThisYear = 0;
 }
 
+// The top-k largest DISCOVERED + ALIVE rival markets (id + current population), for the rival-
+// market chronicle events. Deterministic (population + id tiebreak; no RNG).
+function topDiscoveredRivals(s: WorldState, k: number): Array<{ id: number; pop: number }> {
+  const out: Array<{ id: number; pop: number }> = [];
+  for (const m of s.markets) {
+    if (m.id >= 1 && m.population > 0 && s.encounteredMarkets.has(m.id)) {
+      out.push({ id: m.id, pop: m.population });
+    }
+  }
+  out.sort((a, b) => b.pop - a.pop || a.id - b.id);
+  return out.slice(0, k);
+}
+
 function techUnlock(s: WorldState, m: Market): void {
   const max = maxTechLevel();
   if (m.techLevel >= max) return;
@@ -70,6 +83,8 @@ export function tick(state: WorldState, rng: RNG): void {
 
   // Snapshot for the historical-events feed: player population entering the year.
   const playerPopStart = state.markets[0].population;
+  // The largest DISCOVERED + ALIVE rival markets entering the year (for death/±50%-swing events).
+  const watchedRivals = topDiscoveredRivals(state, CONFIG.OTHER_MARKETS_SHOWN);
 
   // Steps 1-8, fixed order.
   const playerLvlBefore = state.markets[0].techLevel;
@@ -161,6 +176,27 @@ export function tick(state: WorldState, rng: RNG): void {
       const gained = playerPopEnd - playerPopStart;
       const pct = Math.round((gained / playerPopStart) * 100);
       logEvent(state, 'boom', `Population boom \u2014 gained ${formatNumber(gained)} (+${pct}%)`);
+    }
+  }
+
+  // Historical events for the largest discovered rival markets: a top-5 market that collapses, or
+  // one that swings +/- EVENT_MARKET_SWING_FRAC in population in a single year.
+  for (const w of watchedRivals) {
+    const m = state.markets[w.id];
+    const endPop = m ? m.population : 0;
+    if (endPop <= 0) {
+      logEvent(state, 'market', `Rival Market #${w.id} collapsed (was ${formatNumber(w.pop)})`);
+    } else if (
+      w.pop >= CONFIG.EVENT_MIN_POP_FOR_DELTA &&
+      Math.abs(endPop - w.pop) / w.pop >= CONFIG.EVENT_MARKET_SWING_FRAC
+    ) {
+      const grew = endPop > w.pop;
+      const pct = Math.round((Math.abs(endPop - w.pop) / w.pop) * 100);
+      logEvent(
+        state,
+        'market',
+        `Rival Market #${w.id} ${grew ? 'surged' : 'contracted'} ${grew ? '+' : '\u2212'}${pct}% to ${formatNumber(endPop)}`,
+      );
     }
   }
 

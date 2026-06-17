@@ -136,6 +136,9 @@ export const CONFIG = {
   EVENT_MIN_POP_FOR_DELTA: 25, // ignore die-off/boom below this pop (avoids tiny early-game noise)
   EVENT_ENCOUNTER_MILESTONES: [1, 3, 5, 10, 25, 50, 100, 250, 500], // rival-encounter count milestones
   EVENT_LOG_MAX: 500, // cap retained events (oldest dropped beyond this)
+  // "Other markets" panel + rival-market chronicle events
+  OTHER_MARKETS_SHOWN: 5, // # of largest discovered+alive rival markets listed in the side panel
+  EVENT_MARKET_SWING_FRAC: 0.5, // single-year ±pop swing of a top-5 discovered market that logs an event
 
   // turn
   YEARS_PER_TURN_OPTIONS: [10, 50, 250],

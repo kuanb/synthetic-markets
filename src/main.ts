@@ -178,6 +178,7 @@ worker.onmessage = (e: MessageEvent<FromWorker>) => {
       sidebar.update(snap);
       charts.update(snap.log);
       updateEvents(snap);
+      updateMarkets(snap);
       redraw();
       if (msg.type === 'GAME_OVER') {
         gameOver = true;
@@ -350,13 +351,18 @@ viewDefs.forEach(([m, label]) => {
 paintView();
 stage.appendChild(viewWrap);
 
-// history mini-charts — TOP-LEFT overlay on the map (moved out of the sidebar for visibility).
+// Left-column overlay (TOP-LEFT) stacking the History charts + the Other-markets panel.
+const leftCol = document.createElement('div');
+leftCol.style.cssText =
+  'position:absolute;top:12px;left:12px;width:300px;max-height:calc(100% - 160px);overflow-y:auto;' +
+  'display:flex;flex-direction:column;gap:10px;z-index:15;';
+const boxCss =
+  'background:rgba(8,8,8,0.85);border:1px solid #2a2a2a;border-radius:4px;padding:8px 10px;opacity:0.95;';
+
+// history mini-charts (moved out of the sidebar for visibility).
 // Driven from the SNAPSHOT handler below via charts.update(snap.log).
 const historyWrap = document.createElement('div');
-historyWrap.style.cssText =
-  'position:absolute;top:12px;left:12px;width:300px;max-height:calc(100% - 160px);overflow-y:auto;' +
-  'background:rgba(8,8,8,0.85);border:1px solid #2a2a2a;border-radius:4px;padding:8px 10px;' +
-  'opacity:0.95;z-index:15;';
+historyWrap.style.cssText = boxCss;
 // Clickable header (title + caret) to minimize/expand — lets it be hidden on smaller screens.
 const historyHead = document.createElement('div');
 historyHead.style.cssText =
@@ -385,7 +391,75 @@ historyHead.onclick = () => {
   if (!historyMinimized && snap) charts.update(snap.log); // re-render at the correct width on expand
 };
 renderHistoryToggle();
-stage.appendChild(historyWrap);
+leftCol.appendChild(historyWrap);
+
+// ---- Other markets panel (collapsible), stacked below the History box ----
+const marketsWrap = document.createElement('div');
+marketsWrap.style.cssText = boxCss;
+const marketsHead = document.createElement('div');
+marketsHead.style.cssText =
+  'display:flex;justify-content:space-between;align-items:center;cursor:pointer;user-select:none;' +
+  'color:#9aa;font-size:11px;letter-spacing:0.04em;text-transform:uppercase;';
+const marketsTitle = document.createElement('span');
+marketsTitle.textContent = 'Other markets';
+const marketsCaret = document.createElement('span');
+marketsCaret.style.cssText = 'color:#9aa;font-size:12px;';
+marketsHead.appendChild(marketsTitle);
+marketsHead.appendChild(marketsCaret);
+marketsWrap.appendChild(marketsHead);
+const marketsBody = document.createElement('div');
+marketsBody.style.marginTop = '6px';
+marketsWrap.appendChild(marketsBody);
+
+let lastTopMarkets: Snapshot['topMarkets'] = [];
+function renderMarketsList(): void {
+  marketsBody.innerHTML = '';
+  if (lastTopMarkets.length === 0) {
+    const empty = document.createElement('div');
+    empty.textContent = 'No other markets discovered';
+    empty.style.cssText = 'color:#667;font-size:11px;';
+    marketsBody.appendChild(empty);
+    return;
+  }
+  for (const m of lastTopMarkets) {
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;align-items:center;gap:6px;margin:3px 0;font-size:11px;';
+    const sw = document.createElement('span');
+    sw.style.cssText = `flex:0 0 auto;width:9px;height:9px;border-radius:2px;background:hsl(${Math.round(
+      m.colorHue,
+    )},60%,55%);`;
+    const name = document.createElement('span');
+    name.textContent = `Market #${m.id}`;
+    name.style.cssText = 'color:#cdd6e0;flex:1 1 auto;';
+    const stat = document.createElement('span');
+    stat.textContent = `${formatNumber(m.population)} pop \u00b7 ${formatNumber(m.cells)} cells`;
+    stat.style.cssText = 'color:#9aa;flex:0 0 auto;';
+    row.appendChild(sw);
+    row.appendChild(name);
+    row.appendChild(stat);
+    marketsBody.appendChild(row);
+  }
+}
+
+let marketsMinimized = window.innerWidth < 1500;
+const renderMarketsToggle = () => {
+  marketsBody.style.display = marketsMinimized ? 'none' : '';
+  marketsCaret.textContent = marketsMinimized ? '\u25b8' : '\u25be'; // collapsed / expanded
+};
+marketsHead.onclick = () => {
+  marketsMinimized = !marketsMinimized;
+  renderMarketsToggle();
+};
+renderMarketsList();
+renderMarketsToggle();
+leftCol.appendChild(marketsWrap);
+
+stage.appendChild(leftCol);
+
+function updateMarkets(snap: Snapshot): void {
+  lastTopMarkets = snap.topMarkets ?? [];
+  renderMarketsList();
+}
 
 // ---- Chronicle: major historical events (TOP-RIGHT overlay), starting with the Epoch ----
 const EVENT_COLOR: Record<string, string> = {
@@ -396,6 +470,7 @@ const EVENT_COLOR: Record<string, string> = {
   dieoff: '#e68a8a',
   encounter: '#7fd6d6',
   policy: '#9fb0c0',
+  market: '#b0c4d4',
 };
 const chronicleWrap = document.createElement('div');
 chronicleWrap.style.cssText =

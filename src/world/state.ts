@@ -90,7 +90,8 @@ export type EventKind =
   | 'boom' // a large single-year population gain
   | 'dieoff' // a large single-year population loss
   | 'encounter' // a rival-market encounter milestone was reached
-  | 'policy'; // the player changed their allocation policy
+  | 'policy' // the player changed their allocation policy
+  | 'market'; // a top-5 discovered rival market collapsed or swung ±50% in a year
 
 export interface GameEvent {
   year: number;

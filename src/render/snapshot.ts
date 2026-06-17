@@ -9,6 +9,7 @@ import {
   orientation,
 } from '../world/state';
 import { ext, researchCost, maxTechLevel, techName } from '../sim/tech';
+import { CONFIG } from '../config';
 
 export interface MarketSummary {
   id: number;
@@ -56,6 +57,14 @@ export interface MarketSummary {
   famineTolerance: number;
 }
 
+// Lightweight summary of a discovered rival market for the "Other markets" panel.
+export interface OtherMarketSummary {
+  id: number;
+  colorHue: number;
+  population: number;
+  cells: number;
+}
+
 export interface Snapshot {
   year: number;
   width: number;
@@ -71,6 +80,7 @@ export interface Snapshot {
   markets: MarketSummary[];
   log: YearLog[]; // full per-year player history (for the sidebar mini-charts)
   events: GameEvent[]; // major historical events (for the top-right events feed)
+  topMarkets: OtherMarketSummary[]; // largest discovered+alive rival markets (for the side panel)
 }
 
 export function wildHue(groupId: number): number {
@@ -163,6 +173,18 @@ export function buildSnapshot(s: WorldState): Snapshot {
     famineTolerance: m.policy.famineTolerance,
   }));
 
+  // Largest DISCOVERED + ALIVE rival markets (respects fog-of-war: only encountered rivals).
+  const topMarkets: OtherMarketSummary[] = s.markets
+    .filter((m) => m.id >= 1 && m.population > 0 && s.encounteredMarkets.has(m.id))
+    .sort((a, b) => b.population - a.population || a.id - b.id)
+    .slice(0, CONFIG.OTHER_MARKETS_SHOWN)
+    .map((m) => ({
+      id: m.id,
+      colorHue: m.colorHue,
+      population: m.population,
+      cells: m.cells.size,
+    }));
+
   return {
     year: s.year,
     width: s.width,
@@ -176,5 +198,6 @@ export function buildSnapshot(s: WorldState): Snapshot {
     markets,
     log: s.log,
     events: s.events,
+    topMarkets,
   };
 }
