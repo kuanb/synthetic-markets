@@ -183,7 +183,7 @@ export function mountSidebar(
   // Raw allocation: three-way disposition of minable raw, summing to 100%.
   const rawGroup = makeAllocGroup(
     polSec,
-    'Raw allocation',
+    'Raw materials allocation',
     ['Market (goods)', 'Tech (research)', 'Retain in reserves'],
     [rawMarket, rawTech, rawReserve],
     (f) => {
