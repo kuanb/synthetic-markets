@@ -156,16 +156,24 @@ interface Market {
   rawToMarketThisCycle: number;       // mined raw sent to market, tech EXCLUDED (orientation num.)
   rawLeftUnminedThisCycle: number;    // available raw NOT mined this cycle (orientation denom. term)
   bornThisYear: number;
-  diedThisYear: number;
+  diedThisYear: number;       // reset every simulated year (drives the per-year log)
+  diedThisTurn: number;       // accumulated across all years of the most recent End Turn batch
   foodThisYear: number;
   population: number;         // cached Σ live persons owned by this market (derived; refreshed each tick)
 }
 
 interface Policy {
-  laborToFoodFrac: number;    // [0,1]; raw-labor frac = 1 - this
-  rawToResearchFrac: number;  // [0,1]; raw-to-market frac = 1 - this
+  laborToFoodFrac: number;    // [0,1]; mining-labor frac = 1 - this
+  // Three-way disposition of MINABLE raw (rawYield + rawStock). These three MUST sum to 1:
+  rawToMarketFrac: number;    //  -> goods (capitalWealth), tech-scaled in step 5
+  rawToTechFrac: number;      //  -> techProgress (research)
+  rawUnminedFrac: number;     //  -> left in the ground, banks in rawStock ("pay dirt")
+  forcedIntervention: boolean;// player-only: auto market-expansion each cycle while affordable
 }
 ```
+> **[DEFAULT] Three-way raw allocation (v3).** Replaces the original two-way research-vs-market
+> split. Defaults: market `0.6`, tech `0.1`, unmined `0.3` — a low tech share by default so
+> advancing technology is a deliberate strategic investment, not automatic.
 
 > **[DEFAULT] Exactly one player market for the entire game.** Precisely one market has
 > `isPlayer = true` at world gen and it never changes. The human controls **only** this market
@@ -188,6 +196,8 @@ interface Policy {
   High orientation ⇒ the market mines hard and pushes raw to market (aggressive growth). Low
   orientation ⇒ it leaves raw unmined in the ground (restraint). Goods and people do **not**
   appear in this metric. Drives movement bias (§5.4) and conflict (§5.5).
+  `rawToMarketThisCycle` and `rawLeftUnminedThisCycle` are driven by the three-way raw policy
+  (§2.5): the market share of mined raw vs. the deliberately/labour-limited unmined remainder.
 
 ---
 
