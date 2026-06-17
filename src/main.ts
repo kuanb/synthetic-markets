@@ -131,6 +131,48 @@ function panBy(dx: number, dy: number): void {
   redraw();
 }
 
+// Center the viewport on the centroid of the player's largest contiguous territory.
+function centerOnLargestBlob(): void {
+  if (!snap) return;
+  const W = snap.width;
+  const H = snap.height;
+  const mid = snap.marketId;
+  const seen = new Uint8Array(W * H);
+  const stack: number[] = [];
+  let bestSize = 0;
+  let bestX = 0;
+  let bestY = 0;
+  for (let i = 0; i < mid.length; i++) {
+    if (mid[i] !== 0 || seen[i]) continue;
+    stack.length = 0;
+    stack.push(i);
+    seen[i] = 1;
+    let size = 0;
+    let sumX = 0;
+    let sumY = 0;
+    while (stack.length) {
+      const c = stack.pop()!;
+      const x = c % W;
+      const y = (c / W) | 0;
+      size++;
+      sumX += x;
+      sumY += y;
+      if (x > 0 && mid[c - 1] === 0 && !seen[c - 1]) (seen[c - 1] = 1), stack.push(c - 1);
+      if (x < W - 1 && mid[c + 1] === 0 && !seen[c + 1]) (seen[c + 1] = 1), stack.push(c + 1);
+      if (y > 0 && mid[c - W] === 0 && !seen[c - W]) (seen[c - W] = 1), stack.push(c - W);
+      if (y < H - 1 && mid[c + W] === 0 && !seen[c + W]) (seen[c + W] = 1), stack.push(c + W);
+    }
+    if (size > bestSize) {
+      bestSize = size;
+      bestX = Math.round(sumX / size);
+      bestY = Math.round(sumY / size);
+    }
+  }
+  if (bestSize === 0) return;
+  viewport = centerOn(viewport, bestX, bestY, snap, canvas.width, canvas.height);
+  redraw();
+}
+
 window.addEventListener('keydown', (e) => {
   const step = 3;
   if (e.key === 'ArrowLeft') panBy(-step, 0);
@@ -158,6 +200,14 @@ mk('\u2191', 2, 1, 0, -3);
 mk('\u2190', 1, 2, -3, 0);
 mk('\u2192', 3, 2, 3, 0);
 mk('\u2193', 2, 3, 0, 3);
+// center button: locate the player's largest territory (handy between zoom changes)
+const centerBtn = document.createElement('button');
+centerBtn.textContent = '\u2316'; // position indicator
+centerBtn.title = 'Center on your largest territory';
+centerBtn.style.cssText = `grid-column:2;grid-row:2;background:#111;color:#ccc;
+  border:1px solid #2a2a2a;border-radius:3px;font:inherit;cursor:pointer;`;
+centerBtn.onclick = centerOnLargestBlob;
+pad.appendChild(centerBtn);
 stage.appendChild(pad);
 
 // zoom controls (map-view controls -> live on the map overlay, not the sidebar)
