@@ -350,7 +350,7 @@ const EVENT_COLOR: Record<string, string> = {
 };
 const chronicleWrap = document.createElement('div');
 chronicleWrap.style.cssText =
-  'position:absolute;top:12px;right:12px;width:300px;max-height:calc(100% - 24px);overflow-y:auto;' +
+  'position:absolute;top:12px;right:12px;width:300px;max-height:50%;overflow-y:auto;' +
   'background:rgba(8,8,8,0.85);border:1px solid #2a2a2a;border-radius:4px;padding:8px 10px;' +
   'opacity:0.95;z-index:15;';
 const chronicleHead = document.createElement('div');
