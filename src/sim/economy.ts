@@ -11,11 +11,16 @@ import {
 import { CONFIG } from '../config';
 import { ext, foodExt } from './tech';
 
-// Collect live person indices owned by a market (by id).
-function marketPersons(s: WorldState, marketId: number): number[] {
+// Collect live person indices owned by a market. A market's persons always live on its owned
+// cells (movement claims the destination cell; conflict/absorption re-own cell + persons together),
+// so we iterate m.cells instead of scanning the whole pool — O(market persons), not O(capacity).
+// This keeps the per-tick cost flat as the number of markets grows into the thousands.
+function marketPersons(s: WorldState, m: Market): number[] {
   const out: number[] = [];
-  for (let p = 0; p < s.personCapacity; p++) {
-    if (s.personCell[p] !== -1 && s.personOwner[p] === marketId) out.push(p);
+  for (const cell of m.cells) {
+    for (let p = s.cellHead[cell]; p !== -1; p = s.personNext[p]) {
+      if (s.personOwner[p] === m.id) out.push(p);
+    }
   }
   return out;
 }
@@ -74,6 +79,8 @@ export function produce(s: WorldState, m: Market, deficitCells: Set<number>): nu
     m.rawToMarketThisCycle += toMarket;
     m.techProgress += toTech;
     m.rawLeftUnminedThisCycle += unmined;
+    m.rawMinedThisYear += mined;
+    m.techInvestedThisYear += toTech;
 
     totalFood += food;
     if (food < s.cellPopulation[cell]) deficitCells.add(cell);
@@ -96,7 +103,7 @@ export function foodDeaths(s: WorldState, m: Market, food: number, rng: RNG): vo
   const target = Math.floor(food);
   const need = cappedKill(s, m, pop - target);
   if (need <= 0) return;
-  const killed = killRandom(s, marketPersons(s, m.id), need, rng);
+  const killed = killRandom(s, marketPersons(s, m), need, rng);
   m.diedThisYear += killed;
   m.diedThisTurn += killed;
   m.foodDeathsThisTurn += killed;
@@ -125,7 +132,7 @@ export function goodsConsumptionAndDeaths(s: WorldState, m: Market, rng: RNG): v
     let killCount = Math.round(pop * shortfallFrac);
     killCount = Math.min(killCount, Math.floor(pop * CONFIG.GOODS_DEATH_MAX_FRAC)); // gentle cap
     killCount = cappedKill(s, m, killCount);
-    const killed = killRandom(s, marketPersons(s, m.id), killCount, rng);
+    const killed = killRandom(s, marketPersons(s, m), killCount, rng);
     m.diedThisYear += killed;
     m.diedThisTurn += killed;
     m.goodsDeathsThisTurn += killed;

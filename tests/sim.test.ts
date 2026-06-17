@@ -6,6 +6,7 @@ import {
   serialize,
   deserialize,
   marketPopulation,
+  aiMarketCount,
   type WorldState,
 } from '../src/world/state';
 import { tick, tickBatch } from '../src/sim/tick';
@@ -14,6 +15,9 @@ import { formatNumber, formatCell } from '../src/render/format';
 
 const W = 60;
 const H = 60;
+// Sparse world-gen for economy/determinism tests: few rivals + low wild density so the player
+// economy is isolated (and tests stay fast). The dense defaults are exercised separately.
+const OPTS = { wildCellDensity: 0.05, aiMarkets: 4 } as const;
 
 function hash(s: WorldState): string {
   return JSON.stringify(serialize(s));
@@ -84,14 +88,14 @@ describe('compact cell formatter', () => {
 });
 
 describe('world gen', () => {
-  it('instantiates 10 discrete persons for the player', () => {
-    const s = createWorld(123, W, H);
+  it('instantiates 10 discrete persons for the player; AI count derived from map size', () => {
+    const s = createWorld(123, W, H); // defaults -> derived market count + dense wild
     expect(marketPopulation(s, 0)).toBe(CONFIG.PLAYER_START_POP);
-    expect(s.markets.length).toBe(1 + CONFIG.AI_MARKET_COUNT);
+    expect(s.markets.length).toBe(1 + aiMarketCount(W, H));
     expect(s.markets[0].isPlayer).toBe(true);
   });
   it('player starts >= margin from every edge', () => {
-    const s = createWorld(123, W, H);
+    const s = createWorld(123, W, H, OPTS);
     const cell = [...s.markets[0].cells][0];
     const x = cell % W;
     const y = Math.floor(cell / W);
@@ -104,7 +108,7 @@ describe('world gen', () => {
 
 describe('invariants over a run', () => {
   it('no negative state; person integrity holds', () => {
-    const s = createWorld(99, W, H);
+    const s = createWorld(99, W, H, OPTS);
     const rng = makeRng(99);
     for (let i = 0; i < 60; i++) {
       tick(s, rng);
@@ -121,7 +125,7 @@ describe('invariants over a run', () => {
   });
 
   it('death floor: population <= floor(food) after a starving cycle (past safe window)', () => {
-    const s = createWorld(5, W, H);
+    const s = createWorld(5, W, H, OPTS);
     // advance past the early-game player safety window so full mortality applies
     s.year = CONFIG.PLAYER_SAFE_YEARS + 5;
     // force everyone to mine (no food) to trigger starvation
@@ -133,7 +137,7 @@ describe('invariants over a run', () => {
   });
 
   it('early-game safety net keeps the player alive through the opening (ramped floor)', () => {
-    const s = createWorld(5, W, H);
+    const s = createWorld(5, W, H, OPTS);
     s.markets[0].policy.laborToFoodFrac = 0; // starve on purpose
     const rng = makeRng(5);
     // The floor ramps from PLAYER_SAFE_FLOOR down to 0 across the window, so the player must not
@@ -146,8 +150,8 @@ describe('invariants over a run', () => {
 
 describe('determinism + batch equivalence', () => {
   it('same seed + inputs -> identical state hash', () => {
-    const a = createWorld(2024, W, H);
-    const b = createWorld(2024, W, H);
+    const a = createWorld(2024, W, H, OPTS);
+    const b = createWorld(2024, W, H, OPTS);
     tickBatch(a, makeRng(2024), 40);
     tickBatch(b, makeRng(2024), 40);
     expect(hash(a)).toBe(hash(b));
@@ -163,8 +167,8 @@ describe('determinism + batch equivalence', () => {
         (st.finalTechYear >= 0 && st.year >= st.finalTechYear + 2)
       );
     };
-    const a = createWorld(777, W, H);
-    const b = createWorld(777, W, H);
+    const a = createWorld(777, W, H, OPTS);
+    const b = createWorld(777, W, H, OPTS);
     const ra = makeRng(777);
     // Per-turn accumulators are incremented by the economy during tick() and merely reset (to 0,
     // a no-op on a fresh world) at the start of tickBatch — so a manual 1-year loop reproduces a
@@ -178,7 +182,7 @@ describe('determinism + batch equivalence', () => {
   });
 
   it('serialize -> deserialize -> serialize is stable', () => {
-    const s = createWorld(321, W, H);
+    const s = createWorld(321, W, H, OPTS);
     tickBatch(s, makeRng(321), 25);
     const once = serialize(s);
     const round = serialize(deserialize(once));

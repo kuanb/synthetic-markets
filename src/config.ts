@@ -2,15 +2,28 @@
 
 export const CONFIG = {
   // world gen
-  WIDTH: 200,
-  HEIGHT: 200,
+  WIDTH: 300,
+  HEIGHT: 300,
+  MAP_MIN_SIZE: 300, // hard floor enforced in createWorld if a smaller size is ever configured
   CELL_PX: 32,
   PLAYER_START_POP: 10,
   PLAYER_EDGE_MARGIN: 10,
+  // Market density: ~1 market per CELLS_PER_MARKET cells. The AI market count is DERIVED from map
+  // size: floor(width*height / CELLS_PER_MARKET) - 1 (the player is the one remaining market), so
+  // there are many rivals out of the gate. (AI_MARKET_COUNT is a legacy fallback, unused at gen.)
+  // NOTE on defaults vs. the "literal" targets (1:25 markets, 50% density): the discrete-person
+  // model scans the live pool O(N) each tick and ~all agents migrate yearly, so the literal
+  // targets (~3600 markets + ~90k agents on 300x300) made a single 250-year batch take MINUTES.
+  // These constants ARE the tunable knobs; the defaults below are chosen to keep a 250-year turn
+  // responsive (~1-2s). Push them up for denser worlds at the cost of per-turn latency.
+  CELLS_PER_MARKET: 900, // -> ~100 AI markets on 300x300 (many rivals; see perf note)
   AI_MARKET_COUNT: 4,
   AI_START_POP: 5,
-  WILD_PERSON_COUNT: 200,
-  WILD_GROUP_AVG_SIZE: 8,
+  // World population density: ~WILD_CELL_DENSITY of cells are seeded with a small wild group at
+  // gen. Each seeded cell gets WILD_CELL_MIN..MAX persons.
+  WILD_CELL_DENSITY: 0.1,
+  WILD_CELL_MIN: 1,
+  WILD_CELL_MAX: 3,
 
   // noise
   NOISE_OCTAVES: 4,
@@ -19,15 +32,19 @@ export const CONFIG = {
   NOISE_GAIN: 0.5,
   FOOD_YIELD_MAX: 10,
   RAW_YIELD_MAX: 10,
+  // Food-yield floor: cells whose noise >= FOOD_FLOOR_FBM are lifted to at least FOOD_YIELD_FLOOR
+  // so the large majority (~85%) of cells can support >=1 person — curbs pure-food collapse spikes
+  // while leaving the barren ~15% (valleys) below 1 to keep food the primary spatial constraint.
+  FOOD_YIELD_FLOOR: 1,
+  FOOD_FLOOR_FBM: 0.3,
 
   // persons (homogeneous constants; each person shares these)
   LABOR_CAPACITY: 2,
   MOBILITY: 1,
   BIRTH_RATE: 0.1,
   VIEW_RANGE: 1,
-  // Discrete-agent model: every tick scans the live pool O(N). Cap keeps batched 100-year
-  // turns responsive. (Raise for scale at the cost of per-turn latency.)
-  MAX_PERSONS: 100_000,
+  // Discrete-agent model: every tick scans the live pool O(N). Cap bounds per-turn latency.
+  MAX_PERSONS: 80_000,
 
   // policy defaults (player starting slider positions)
   LABOR_TO_FOOD_DEFAULT: 0.5, // labor: food vs mining (raw = 1 - this)

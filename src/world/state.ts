@@ -53,6 +53,8 @@ export interface Market {
   foodDeathsTotal: number;
   goodsDeathsTotal: number;
   foodThisYear: number;
+  rawMinedThisYear: number; // total raw units mined this year (reset each tick)
+  techInvestedThisYear: number; // raw allocated to research this year (reset each tick)
   population: number;
 }
 
@@ -62,6 +64,8 @@ export interface YearLog {
   died: number;
   food: number;
   goods: number;
+  rawMined: number;
+  techInvested: number;
   capitalWealth: number;
   population: number;
 }
@@ -191,6 +195,12 @@ export function movePerson(s: WorldState, p: number, toCell: number): void {
 }
 
 export function setPersonOwner(s: WorldState, p: number, owner: number): void {
+  const prev = s.personOwner[p];
+  if (prev === owner) return;
+  // Keep the per-market population caches exact through conflict/absorption (owner changes),
+  // so the cache never drifts from the true count between refreshes (matters for serialize).
+  if (prev >= 0 && s.markets[prev]) s.markets[prev].population--;
+  if (owner >= 0 && s.markets[owner]) s.markets[owner].population++;
   s.personOwner[p] = owner;
 }
 
@@ -271,6 +281,8 @@ function makeMarket(id: number, isPlayer: boolean, propensityToExpand: number): 
     foodDeathsTotal: 0,
     goodsDeathsTotal: 0,
     foodThisYear: 0,
+    rawMinedThisYear: 0,
+    techInvestedThisYear: 0,
     population: 0,
   };
 }
@@ -298,7 +310,23 @@ function claimCell(s: WorldState, cell: number, m: Market): void {
   m.cells.add(cell);
 }
 
-export function createWorld(seed: number, width: number, height: number): WorldState {
+// AI market count derived from map size: ~1 market per CELLS_PER_MARKET cells, minus the player.
+export function aiMarketCount(width: number, height: number): number {
+  return Math.max(0, Math.floor((width * height) / CONFIG.CELLS_PER_MARKET) - 1);
+}
+
+// Optional world-gen overrides (used by tests to get sparse, isolated economies). Game uses defaults.
+export interface WorldGenOpts {
+  wildCellDensity?: number;
+  aiMarkets?: number;
+}
+
+export function createWorld(
+  seed: number,
+  width: number,
+  height: number,
+  opts: WorldGenOpts = {},
+): WorldState {
   const terrain = generateTerrain(seed, width, height);
   const n = width * height;
   const cellHead = new Int32Array(n).fill(-1);
@@ -356,9 +384,10 @@ export function createWorld(seed: number, width: number, height: number): WorldS
   reveal(s, playerCell);
   for (let i = 0; i < CONFIG.PLAYER_START_POP; i++) spawnPerson(s, playerCell, 0, 0);
 
-  // AI markets.
+  // AI markets — count derived from map size (~1 per CELLS_PER_MARKET cells), unless overridden.
+  const aiCount = opts.aiMarkets ?? aiMarketCount(width, height);
   const used = new Set<number>([playerCell]);
-  for (let a = 1; a <= CONFIG.AI_MARKET_COUNT; a++) {
+  for (let a = 1; a <= aiCount; a++) {
     let cell: number;
     let guard = 0;
     do {
@@ -372,19 +401,17 @@ export function createWorld(seed: number, width: number, height: number): WorldS
     for (let i = 0; i < CONFIG.AI_START_POP; i++) spawnPerson(s, cell, a, 0);
   }
 
-  // Wild persons in small groups.
-  let remaining = CONFIG.WILD_PERSON_COUNT;
-  while (remaining > 0) {
-    const size = Math.min(remaining, 1 + rng.nextInt(CONFIG.WILD_GROUP_AVG_SIZE * 2 - 1));
-    const cell = rng.nextInt(n);
-    if (s.marketId[cell] !== -1) {
-      // don't seed wild on an owned cell; retry by skipping this iteration
-      continue;
-    }
+  // Wild population by density: seed ~wildCellDensity of the unowned cells with a small group,
+  // so roughly half the map is occupied at gen. Single pass over cells (deterministic).
+  const wildDensity = opts.wildCellDensity ?? CONFIG.WILD_CELL_DENSITY;
+  const span = Math.max(1, CONFIG.WILD_CELL_MAX - CONFIG.WILD_CELL_MIN + 1);
+  for (let cell = 0; cell < n; cell++) {
+    if (s.marketId[cell] !== -1) continue;
+    if (rng.next() >= wildDensity) continue;
+    const size = CONFIG.WILD_CELL_MIN + rng.nextInt(span);
     const groupId = s.nextWildGroupId++;
     const code = wildOwnerCode(groupId);
     for (let i = 0; i < size; i++) spawnPerson(s, cell, code, 0);
-    remaining -= size;
   }
 
   s.rngState = rng.getState();
@@ -477,6 +504,8 @@ export function deserialize(p: SerializedState): WorldState {
       goodsAvailableThisTurn: m.goodsAvailableThisTurn ?? 0,
       foodDeathsTotal: m.foodDeathsTotal ?? 0,
       goodsDeathsTotal: m.goodsDeathsTotal ?? 0,
+      rawMinedThisYear: m.rawMinedThisYear ?? 0,
+      techInvestedThisYear: m.techInvestedThisYear ?? 0,
       cells: new Set<number>(m.cells),
     })),
     nextWildGroupId: p.nextWildGroupId,

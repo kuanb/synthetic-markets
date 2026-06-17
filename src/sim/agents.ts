@@ -4,7 +4,6 @@
 
 import type { RNG } from '../world/rng';
 import {
-  type Market,
   type WorldState,
   isWild,
   marketIdOf,
@@ -26,17 +25,22 @@ const DIRS: ReadonlyArray<readonly [number, number]> = [
   [1, 0],
 ];
 
-// Step 2: each of the market's live persons rolls BIRTH_RATE independently.
-export function births(s: WorldState, m: Market, rng: RNG): void {
+// Step 2: SINGLE global pass — each market-owned live person rolls BIRTH_RATE independently.
+// (Wild persons don't reproduce — they only wander until absorbed.) One O(liveCount) scan total
+// instead of O(capacity) per market, which is essential with thousands of markets.
+export function births(s: WorldState, rng: RNG): void {
+  // Snapshot current parents so newborns don't reproduce in the same year.
   const parents: number[] = [];
   for (let p = 0; p < s.personCapacity; p++) {
-    if (s.personCell[p] !== -1 && s.personOwner[p] === m.id) parents.push(p);
+    if (s.personCell[p] !== -1 && !isWild(s.personOwner[p])) parents.push(p);
   }
   for (const parent of parents) {
     if (s.liveCount >= CONFIG.MAX_PERSONS) break;
     if (rng.next() < CONFIG.BIRTH_RATE) {
-      const child = spawnPerson(s, s.personCell[parent], m.id, 0);
+      const owner = s.personOwner[parent];
+      const child = spawnPerson(s, s.personCell[parent], owner, 0);
       if (child !== -1) {
+        const m = s.markets[marketIdOf(owner)];
         m.bornThisYear++;
         m.population++;
       }

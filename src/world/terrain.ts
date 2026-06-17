@@ -55,7 +55,12 @@ export function generateTerrain(seed: number, width: number, height: number): Te
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
       const i = y * width + x;
-      foodYield[i] = fbm(x, y, foodSeed) * CONFIG.FOOD_YIELD_MAX;
+      const f = fbm(x, y, foodSeed); // [0,1]
+      let food = f * CONFIG.FOOD_YIELD_MAX;
+      // Food floor: lift the majority of cells (noise >= FOOD_FLOOR_FBM, ~85%) to >=1 so they can
+      // support a person; leave barren valleys (below the threshold) under 1.
+      if (f >= CONFIG.FOOD_FLOOR_FBM && food < CONFIG.FOOD_YIELD_FLOOR) food = CONFIG.FOOD_YIELD_FLOOR;
+      foodYield[i] = food;
       rawYield[i] = fbm(x + 4096, y + 4096, rawSeed) * CONFIG.RAW_YIELD_MAX;
     }
   }

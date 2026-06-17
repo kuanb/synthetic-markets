@@ -30,7 +30,7 @@ function runScenario(policy: Policy): {
   capitalWealth: number;
   orientationVal: number;
 } {
-  const s = createWorld(SEED, SIZE, SIZE);
+  const s = createWorld(SEED, SIZE, SIZE, { wildCellDensity: 0.05, aiMarkets: 4 });
   const rng = makeRng(SEED);
   s.markets[0].policy = { ...policy };
 
@@ -126,7 +126,7 @@ describe('balance smoke', () => {
       rawUnminedFrac: CONFIG.RAW_UNMINED_DEFAULT,
       forcedIntervention: false,
     };
-    const s = createWorld(424242, 60, 60);
+    const s = createWorld(424242, 60, 60, { wildCellDensity: 0.05, aiMarkets: 4 });
     const rng = makeRng(424242);
     s.markets[0].policy = { ...policy };
 

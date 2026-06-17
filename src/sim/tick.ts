@@ -27,6 +27,8 @@ function resetAccumulators(m: Market): void {
   m.bornThisYear = 0;
   m.diedThisYear = 0;
   m.foodThisYear = 0;
+  m.rawMinedThisYear = 0;
+  m.techInvestedThisYear = 0;
 }
 
 function techUnlock(s: WorldState, m: Market): void {
@@ -62,9 +64,9 @@ export function tick(state: WorldState, rng: RNG): void {
 
   const deficitCells = new Set<number>();
 
-  // Steps 1-8 per market, fixed order.
+  // Steps 1-8, fixed order.
   for (const m of state.markets) techUnlock(state, m); // 1
-  for (const m of state.markets) births(state, m, rngBirth); // 2
+  births(state, rngBirth); // 2 (single global pass)
   for (const m of state.markets) {
     const food = produce(state, m, deficitCells); // 3 + 4 (production + three-way raw disposition)
     accrueGoods(m); // 5
@@ -91,6 +93,8 @@ export function tick(state: WorldState, rng: RNG): void {
     died: player.diedThisYear,
     food: player.foodThisYear,
     goods: player.goodsProducedThisCycle,
+    rawMined: player.rawMinedThisYear,
+    techInvested: player.techInvestedThisYear,
     capitalWealth: player.capitalWealth,
     population: player.population,
   });

@@ -7,7 +7,6 @@ import {
   marketIdOf,
   movePerson,
   orientation,
-  personsOnCell,
   setPersonOwner,
 } from '../world/state';
 import { CONFIG } from '../config';
@@ -25,10 +24,16 @@ function claim(s: WorldState, cell: number, marketId: number): void {
   s.markets[marketId].cells.add(cell);
 }
 
+// Walk the cell's intrusive linked list directly (no array allocation — this is a hot path).
+// setPersonOwner does not relink, so iterating while re-owning is safe.
 function absorbWild(s: WorldState, cell: number, marketId: number): void {
-  for (const q of personsOnCell(s, cell)) {
+  for (let q = s.cellHead[cell]; q !== -1; q = s.personNext[q]) {
     if (isWild(s.personOwner[q])) setPersonOwner(s, q, marketId);
   }
+}
+
+function convertAll(s: WorldState, cell: number, marketId: number): void {
+  for (let q = s.cellHead[cell]; q !== -1; q = s.personNext[q]) setPersonOwner(s, q, marketId);
 }
 
 export function resolveMove(s: WorldState, intent: MoveIntent, rng: RNG): void {
@@ -73,7 +78,7 @@ export function resolveMove(s: WorldState, intent: MoveIntent, rng: RNG): void {
   const winner = attacker.capitalWealth > defender.capitalWealth ? attacker : defender;
 
   // All persons on the contested cell convert to the winner.
-  for (const q of personsOnCell(s, to)) setPersonOwner(s, q, winner.id);
+  convertAll(s, to, winner.id);
   claim(s, to, winner.id); // banked rawStock transfers implicitly with the cell
 
   if (winner.id === mid) {
