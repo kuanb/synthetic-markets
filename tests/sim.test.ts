@@ -132,12 +132,15 @@ describe('invariants over a run', () => {
     expect(s.markets[0].population).toBeLessThanOrEqual(Math.floor(s.markets[0].foodThisYear) + 1);
   });
 
-  it('early-game safety net keeps the player alive through the opening', () => {
+  it('early-game safety net keeps the player alive through the opening (ramped floor)', () => {
     const s = createWorld(5, W, H);
     s.markets[0].policy.laborToFoodFrac = 0; // starve on purpose
     const rng = makeRng(5);
-    for (let i = 0; i < CONFIG.PLAYER_SAFE_YEARS; i++) tick(s, rng);
-    expect(s.markets[0].population).toBeGreaterThanOrEqual(CONFIG.PLAYER_SAFE_FLOOR);
+    // The floor ramps from PLAYER_SAFE_FLOOR down to 0 across the window, so the player must not
+    // be wiped out during the critical opening even under total starvation.
+    const half = Math.floor(CONFIG.PLAYER_SAFE_YEARS / 2);
+    for (let i = 0; i < half; i++) tick(s, rng);
+    expect(s.markets[0].population).toBeGreaterThan(0);
   });
 });
 
@@ -163,11 +166,11 @@ describe('determinism + batch equivalence', () => {
     const a = createWorld(777, W, H);
     const b = createWorld(777, W, H);
     const ra = makeRng(777);
-    // Mirror tickBatch exactly, including the per-turn death accumulator.
-    for (const m of a.markets) m.diedThisTurn = 0;
+    // Per-turn accumulators are incremented by the economy during tick() and merely reset (to 0,
+    // a no-op on a fresh world) at the start of tickBatch — so a manual 1-year loop reproduces a
+    // single tickBatch exactly, no mirroring needed.
     for (let i = 0; i < 80; i++) {
       tick(a, ra);
-      for (const m of a.markets) m.diedThisTurn += m.diedThisYear;
       if (ended(a)) break;
     }
     tickBatch(b, makeRng(777), 80);

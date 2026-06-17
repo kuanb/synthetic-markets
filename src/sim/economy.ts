@@ -20,11 +20,13 @@ function marketPersons(s: WorldState, marketId: number): number[] {
   return out;
 }
 
-// Early-game safety net: during the opening window the player cannot be driven below the floor.
-// AI markets and wild persons are never protected. Eventual collapse remains possible afterwards.
+// Early-game safety net: during the opening window the player cannot be driven below a floor that
+// RAMPS linearly from PLAYER_SAFE_FLOOR (year 0) down to 0 (year PLAYER_SAFE_YEARS) — so there is
+// no mortality "cliff" when the window ends. AI markets and wild persons are never protected.
 function cappedKill(s: WorldState, m: Market, desired: number): number {
   if (m.isPlayer && s.year < CONFIG.PLAYER_SAFE_YEARS) {
-    return Math.max(0, Math.min(desired, m.population - CONFIG.PLAYER_SAFE_FLOOR));
+    const floor = CONFIG.PLAYER_SAFE_FLOOR * (1 - s.year / CONFIG.PLAYER_SAFE_YEARS);
+    return Math.max(0, Math.floor(Math.min(desired, m.population - floor)));
   }
   return desired;
 }
@@ -86,33 +88,48 @@ export function accrueGoods(m: Market): void {
   m.capitalWealth += m.goodsProducedThisCycle;
 }
 
-// Step 6: starvation. population must end <= floor(food available).
+// Step 6: starvation (food is the PRIMARY constraint). Population must end <= floor(food).
 export function foodDeaths(s: WorldState, m: Market, food: number, rng: RNG): void {
   const pop = m.population;
+  m.foodNeededThisTurn += pop; // each living person needs 1 food/cycle
+  m.foodProducedThisTurn += food;
   const target = Math.floor(food);
   const need = cappedKill(s, m, pop - target);
   if (need <= 0) return;
   const killed = killRandom(s, marketPersons(s, m.id), need, rng);
   m.diedThisYear += killed;
+  m.diedThisTurn += killed;
+  m.foodDeathsThisTurn += killed;
+  m.foodDeathsTotal += killed;
   m.population -= killed;
 }
 
-// Step 7: auto-consume goods from the capital pool; kill on shortfall.
+// Step 7: auto-consume goods from the capital pool; kill GENTLY on a sustained shortfall.
+// Goods-death is bounded to GOODS_DEATH_MAX_FRAC of the population per year so a goods shortfall
+// is a gradual decline (decadence), never an instant wipe. Food remains the primary killer.
 export function goodsConsumptionAndDeaths(s: WorldState, m: Market, rng: RNG): void {
   const pop = m.population;
   if (pop <= 0) {
     m.goodsConsumedThisCycle = 0;
     return;
   }
+  const available = m.capitalWealth; // prior capital + this cycle's goods (accrued in step 5)
   const need = pop * m.desireToConsume;
-  const draw = Math.min(need, m.capitalWealth);
+  m.goodsNeededThisTurn += need;
+  m.goodsAvailableThisTurn += available;
+  const draw = Math.min(need, available);
   m.capitalWealth -= draw;
   m.goodsConsumedThisCycle = draw;
   if (need > 0 && draw < need) {
     const shortfallFrac = (need - draw) / need;
-    const killCount = cappedKill(s, m, Math.round(pop * shortfallFrac));
+    let killCount = Math.round(pop * shortfallFrac);
+    killCount = Math.min(killCount, Math.floor(pop * CONFIG.GOODS_DEATH_MAX_FRAC)); // gentle cap
+    killCount = cappedKill(s, m, killCount);
     const killed = killRandom(s, marketPersons(s, m.id), killCount, rng);
     m.diedThisYear += killed;
+    m.diedThisTurn += killed;
+    m.goodsDeathsThisTurn += killed;
+    m.goodsDeathsTotal += killed;
     m.population -= killed;
   }
 }
@@ -131,11 +148,19 @@ export function burstSpend(s: WorldState, m: Market): boolean {
   return true;
 }
 
-// Step 8: desire grows with per-capita wealth, capped.
+// Step 8: desire eases toward a fraction of per-capita goods THROUGHPUT (flow), not accumulated
+// capital (stock). Tying aspiration to what the economy actually produces stops desire from
+// ratcheting up off a hoarded capital pile and then mass-starving the market. With
+// DESIRE_SUPPLY_FRAC < 1 the surplus still accrues as capitalWealth (the late-game wealth
+// explosion is preserved), while goods-starvation stays POSSIBLE if production later falls.
 export function updateDesire(m: Market): void {
   const pop = Math.max(1, m.population);
-  m.desireToConsume = Math.min(
-    CONFIG.DESIRE_CAP,
-    m.desireToConsume + CONFIG.DESIRE_GROWTH_K * (m.capitalWealth / pop),
+  const aspiration = (m.goodsProducedThisCycle / pop) * CONFIG.DESIRE_SUPPLY_FRAC;
+  m.desireToConsume = Math.max(
+    0,
+    Math.min(
+      CONFIG.DESIRE_CAP,
+      m.desireToConsume + CONFIG.DESIRE_GROWTH_K * (aspiration - m.desireToConsume),
+    ),
   );
 }

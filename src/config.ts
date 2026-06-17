@@ -51,9 +51,19 @@ export const CONFIG = {
   RESEARCH_R: 1.3,
 
   // desire / propensity
-  DESIRE_GROWTH_K: 0.02,
-  // Soft ceiling only. Desire keeps tracking per-capita wealth so a rich, stagnant market can
-  // have consumption outrun goods and suffer goods-starvation (decadence collapse).
+  // DESIRE_GROWTH_K is now an EASING rate (0..1): desireToConsume eases this fraction of the way
+  // toward its aspiration each year. Aspiration = DESIRE_SUPPLY_FRAC * per-capita goods THROUGHPUT
+  // (flow), not accumulated capital — this stops desire ratcheting off a hoarded pile and then
+  // mass-starving the market (the reported early die-off).
+  DESIRE_GROWTH_K: 0.1,
+  // Aspiration targets only this fraction of per-capita goods produced, so the surplus still
+  // accrues as capitalWealth (wealth explosion preserved) and steady production comfortably covers
+  // consumption. < 1 ⇒ no goods-starvation under steady play; goods-death only on a real downturn.
+  DESIRE_SUPPLY_FRAC: 0.5,
+  // Goods-shortfall deaths are capped to this fraction of population per year: a gradual decline
+  // (decadence), never an instant wipe. Food deaths are NOT capped (food is the hard constraint).
+  GOODS_DEATH_MAX_FRAC: 0.1,
+  // Soft ceiling only (rarely binds now that desire tracks throughput).
   DESIRE_CAP: 1_000_000,
   PROPENSITY_RISE: 0.15,
   PROPENSITY_DECAY: 0.1,

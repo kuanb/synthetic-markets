@@ -42,6 +42,16 @@ export interface Market {
   bornThisYear: number;
   diedThisYear: number; // reset every simulated year (drives the per-year log)
   diedThisTurn: number; // accumulated across all years of the most recent End Turn batch
+  // per-turn diagnostics (reset at the start of each tickBatch; totals across the batched years)
+  foodDeathsThisTurn: number;
+  goodsDeathsThisTurn: number;
+  foodNeededThisTurn: number; // Σ population each year (each person needs 1 food/cycle)
+  foodProducedThisTurn: number; // Σ market food output each year
+  goodsNeededThisTurn: number; // Σ population * desireToConsume each year
+  goodsAvailableThisTurn: number; // Σ goods available to consume (prior capital + this cycle's goods)
+  // cumulative death tallies by cause (never reset)
+  foodDeathsTotal: number;
+  goodsDeathsTotal: number;
   foodThisYear: number;
   population: number;
 }
@@ -252,6 +262,14 @@ function makeMarket(id: number, isPlayer: boolean, propensityToExpand: number): 
     bornThisYear: 0,
     diedThisYear: 0,
     diedThisTurn: 0,
+    foodDeathsThisTurn: 0,
+    goodsDeathsThisTurn: 0,
+    foodNeededThisTurn: 0,
+    foodProducedThisTurn: 0,
+    goodsNeededThisTurn: 0,
+    goodsAvailableThisTurn: 0,
+    foodDeathsTotal: 0,
+    goodsDeathsTotal: 0,
     foodThisYear: 0,
     population: 0,
   };
@@ -451,6 +469,14 @@ export function deserialize(p: SerializedState): WorldState {
     markets: p.markets.map((m) => ({
       ...m,
       diedThisTurn: m.diedThisTurn ?? 0,
+      foodDeathsThisTurn: m.foodDeathsThisTurn ?? 0,
+      goodsDeathsThisTurn: m.goodsDeathsThisTurn ?? 0,
+      foodNeededThisTurn: m.foodNeededThisTurn ?? 0,
+      foodProducedThisTurn: m.foodProducedThisTurn ?? 0,
+      goodsNeededThisTurn: m.goodsNeededThisTurn ?? 0,
+      goodsAvailableThisTurn: m.goodsAvailableThisTurn ?? 0,
+      foodDeathsTotal: m.foodDeathsTotal ?? 0,
+      goodsDeathsTotal: m.goodsDeathsTotal ?? 0,
       cells: new Set<number>(m.cells),
     })),
     nextWildGroupId: p.nextWildGroupId,

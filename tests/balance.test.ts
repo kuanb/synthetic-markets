@@ -116,4 +116,66 @@ describe('balance smoke', () => {
     expect(casual.techLevel).toBeLessThan(maxTechLevel()); // tech is NOT automatic
     expect(aggressive.techLevel).toBeGreaterThan(casual.techLevel); // research is a real lever
   });
+
+  it('default policy does NOT mass-die early; deaths split by cause are reported', () => {
+    // Exactly the in-game default policy (config defaults).
+    const policy: Policy = {
+      laborToFoodFrac: CONFIG.LABOR_TO_FOOD_DEFAULT,
+      rawToMarketFrac: CONFIG.RAW_TO_MARKET_DEFAULT,
+      rawToTechFrac: CONFIG.RAW_TO_TECH_DEFAULT,
+      rawUnminedFrac: CONFIG.RAW_UNMINED_DEFAULT,
+      forcedIntervention: false,
+    };
+    const s = createWorld(424242, 60, 60);
+    const rng = makeRng(424242);
+    s.markets[0].policy = { ...policy };
+
+    let minPop = Infinity;
+    let popAt60 = 0;
+    let worstGoodsYear = 0;
+    const sample: string[] = [];
+    let prevFoodD = 0;
+    let prevGoodsD = 0;
+
+    for (let y = 0; y < 100; y++) {
+      tick(s, rng);
+      const p = s.markets[0];
+      const foodD = p.foodDeathsTotal - prevFoodD;
+      const goodsD = p.goodsDeathsTotal - prevGoodsD;
+      prevFoodD = p.foodDeathsTotal;
+      prevGoodsD = p.goodsDeathsTotal;
+      worstGoodsYear = Math.max(worstGoodsYear, goodsD);
+      minPop = Math.min(minPop, p.population);
+      if (y + 1 === 60) popAt60 = p.population;
+      if (y < 8 || (y + 1) % 20 === 0) {
+        sample.push(
+          `y${y + 1}: pop=${p.population} food ${p.foodThisYear.toFixed(0)}/${p.population} ` +
+            `goods need=${(p.population * p.desireToConsume).toFixed(1)} cap=${p.capitalWealth.toFixed(
+              1,
+            )} dF=${foodD} dG=${goodsD}`,
+        );
+      }
+    }
+    const p = s.markets[0];
+
+    /* eslint-disable no-console */
+    console.log('--- DIE-OFF DIAGNOSIS (default policy) ---');
+    console.log(
+      `GOODS_DEATH_MAX_FRAC=${CONFIG.GOODS_DEATH_MAX_FRAC} DESIRE_SUPPLY_FRAC=${CONFIG.DESIRE_SUPPLY_FRAC} ` +
+        `DESIRE_GROWTH_K=${CONFIG.DESIRE_GROWTH_K}`,
+    );
+    console.log(sample.join('\n'));
+    console.log(
+      `minPop(0..100)=${minPop} popAt60=${popAt60} finalPop=${p.population} ` +
+        `foodDeaths=${p.foodDeathsTotal} goodsDeaths=${p.goodsDeathsTotal} worstGoodsYear=${worstGoodsYear}`,
+    );
+    console.log('------------------------------------------');
+    /* eslint-enable no-console */
+
+    // Regression: no unexplained near-total early wipe under default policy.
+    expect(popAt60).toBeGreaterThan(CONFIG.PLAYER_START_POP);
+    expect(minPop).toBeGreaterThanOrEqual(CONFIG.PLAYER_SAFE_FLOOR - 1);
+    // Goods-death is the gentle/secondary cause: never the mass killer under default play.
+    expect(p.goodsDeathsTotal).toBeLessThan(p.population);
+  });
 });

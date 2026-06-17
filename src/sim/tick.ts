@@ -112,11 +112,20 @@ function endState(state: WorldState): EndState {
 }
 
 export function tickBatch(state: WorldState, rng: RNG, years: number): EndState {
-  // Reset the per-turn death accumulator at the start of the batch; accumulate each year.
-  for (const m of state.markets) m.diedThisTurn = 0;
+  // Reset per-turn accumulators at the start of the batch. The economy increments them as each
+  // year resolves, so they end up as totals across the batched years (a fresh world starts at 0,
+  // which is why a manual 1-year loop reproduces a single tickBatch exactly — see tests).
+  for (const m of state.markets) {
+    m.diedThisTurn = 0;
+    m.foodDeathsThisTurn = 0;
+    m.goodsDeathsThisTurn = 0;
+    m.foodNeededThisTurn = 0;
+    m.foodProducedThisTurn = 0;
+    m.goodsNeededThisTurn = 0;
+    m.goodsAvailableThisTurn = 0;
+  }
   for (let i = 0; i < years; i++) {
     tick(state, rng);
-    for (const m of state.markets) m.diedThisTurn += m.diedThisYear;
     const end = endState(state);
     if (end.over) return end;
   }
