@@ -13,8 +13,14 @@ import {
 } from '../util/base64';
 
 export interface Policy {
-  laborToFoodFrac: number; // [0,1]; raw-labor frac = 1 - this
-  rawToResearchFrac: number; // [0,1]; raw-to-market frac = 1 - this
+  laborToFoodFrac: number; // [0,1]; mining-labor frac = 1 - this
+  // Three-way disposition of MINABLE raw (rawYield + rawStock). These three MUST sum to 1:
+  rawToMarketFrac: number; //  -> goods (capitalWealth), tech-scaled in step 5
+  rawToTechFrac: number; //    -> techProgress (research)
+  rawUnminedFrac: number; //   -> left in the ground, banks in rawStock
+  // Player-only: when true, the forced intervention (market expansion / burst spend) is
+  // auto-applied every cycle while affordable. Unused for AI markets.
+  forcedIntervention: boolean;
 }
 
 export interface Market {
@@ -34,7 +40,8 @@ export interface Market {
   rawToMarketThisCycle: number;
   rawLeftUnminedThisCycle: number;
   bornThisYear: number;
-  diedThisYear: number;
+  diedThisYear: number; // reset every simulated year (drives the per-year log)
+  diedThisTurn: number; // accumulated across all years of the most recent End Turn batch
   foodThisYear: number;
   population: number;
 }
@@ -231,7 +238,10 @@ function makeMarket(id: number, isPlayer: boolean, propensityToExpand: number): 
     desireToConsume: 0,
     policy: {
       laborToFoodFrac: CONFIG.LABOR_TO_FOOD_DEFAULT,
-      rawToResearchFrac: CONFIG.RAW_TO_RESEARCH_DEFAULT,
+      rawToMarketFrac: CONFIG.RAW_TO_MARKET_DEFAULT,
+      rawToTechFrac: CONFIG.RAW_TO_TECH_DEFAULT,
+      rawUnminedFrac: CONFIG.RAW_UNMINED_DEFAULT,
+      forcedIntervention: false,
     },
     propensityToExpand,
     isPlayer,
@@ -241,6 +251,7 @@ function makeMarket(id: number, isPlayer: boolean, propensityToExpand: number): 
     rawLeftUnminedThisCycle: 0,
     bornThisYear: 0,
     diedThisYear: 0,
+    diedThisTurn: 0,
     foodThisYear: 0,
     population: 0,
   };
@@ -301,6 +312,20 @@ export function createWorld(seed: number, width: number, height: number): WorldS
   const player = makeMarket(0, true, 0);
   s.markets.push(player);
   const playerCell = idx(s, px, py);
+  // Guarantee a survivable, fertile start: the start cell is fully fertile and its rook
+  // neighbours have a minimum food yield so early growth has somewhere to expand into.
+  s.foodYield[playerCell] = Math.max(s.foodYield[playerCell], CONFIG.PLAYER_START_FOOD);
+  for (const [dx, dy] of [
+    [0, -1],
+    [0, 1],
+    [-1, 0],
+    [1, 0],
+  ]) {
+    if (inBounds(s, px + dx, py + dy)) {
+      const nc = idx(s, px + dx, py + dy);
+      s.foodYield[nc] = Math.max(s.foodYield[nc], CONFIG.PLAYER_START_NEIGHBOR_FOOD_MIN);
+    }
+  }
   claimCell(s, playerCell, player);
   reveal(s, playerCell);
   for (let i = 0; i < CONFIG.PLAYER_START_POP; i++) spawnPerson(s, playerCell, 0, 0);
@@ -415,7 +440,11 @@ export function deserialize(p: SerializedState): WorldState {
     personCapacity: cap,
     personFreeList: [],
     liveCount: 0,
-    markets: p.markets.map((m) => ({ ...m, cells: new Set<number>(m.cells) })),
+    markets: p.markets.map((m) => ({
+      ...m,
+      diedThisTurn: m.diedThisTurn ?? 0,
+      cells: new Set<number>(m.cells),
+    })),
     nextWildGroupId: p.nextWildGroupId,
     rngState: p.rngState,
   };

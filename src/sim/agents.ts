@@ -55,7 +55,9 @@ function metric(s: WorldState, cell: number, marketOriented: boolean): number {
     if (saturatedRaw(s, cell)) return -Infinity;
     return s.rawYield[cell] + s.rawStock[cell];
   }
-  return s.foodYield[cell];
+  // People-oriented: seek food HEADROOM (carrying capacity minus current mouths), not raw yield.
+  // This is what makes a crowded cell shed population into emptier land -> spatial expansion.
+  return s.foodYield[cell] - s.cellPopulation[cell];
 }
 
 // Step 9 (intent phase): produce a move intent per moving person.

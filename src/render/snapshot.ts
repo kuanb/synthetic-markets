@@ -25,8 +25,16 @@ export interface MarketSummary {
   desireToConsume: number;
   bornThisYear: number;
   diedThisYear: number;
+  diedThisTurn: number;
   cumulativeDead: number;
   orientation: number;
+  // current policy (so the UI can reflect a loaded save)
+  laborToFoodFrac: number;
+  rawToMarketFrac: number;
+  rawToTechFrac: number;
+  rawUnminedFrac: number;
+  forcedIntervention: boolean;
+  interventionCost: number; // ceil(cells/2); affordable when capitalWealth >= this
 }
 
 export interface Snapshot {
@@ -105,8 +113,15 @@ export function buildSnapshot(s: WorldState): Snapshot {
     desireToConsume: m.desireToConsume,
     bornThisYear: m.bornThisYear,
     diedThisYear: m.diedThisYear,
+    diedThisTurn: m.diedThisTurn,
     cumulativeDead: m.isPlayer ? playerDead : 0,
     orientation: orientation(m),
+    laborToFoodFrac: m.policy.laborToFoodFrac,
+    rawToMarketFrac: m.policy.rawToMarketFrac,
+    rawToTechFrac: m.policy.rawToTechFrac,
+    rawUnminedFrac: m.policy.rawUnminedFrac,
+    forcedIntervention: m.policy.forcedIntervention,
+    interventionCost: Math.ceil(m.cells.size / 2),
   }));
 
   return {

@@ -2,9 +2,15 @@
 
 import { CONFIG, TECH_TABLE } from '../config';
 
-// ext(level) = TECH_MULTIPLIER ^ level. level 0 => 1.0.
+// ext(level) = TECH_MULTIPLIER ^ level. level 0 => 1.0. Scales RAW -> GOODS (wealth).
 export function ext(techLevel: number): number {
   return Math.pow(CONFIG.TECH_MULTIPLIER, techLevel);
+}
+
+// foodExt(level) = FOOD_TECH_MULTIPLIER ^ level. Separate, much weaker (default unity) factor so
+// food stays land-limited and population must spread across cells. See PLAN.md §5.1/§5.2.
+export function foodExt(techLevel: number): number {
+  return Math.pow(CONFIG.FOOD_TECH_MULTIPLIER, techLevel);
 }
 
 // cost (in raw units) to reach `targetLevel` from targetLevel-1.

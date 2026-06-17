@@ -10,7 +10,7 @@ import {
 } from '../src/world/state';
 import { tick, tickBatch } from '../src/sim/tick';
 import { ext, researchCost, maxTechLevel } from '../src/sim/tech';
-import { formatNumber } from '../src/render/format';
+import { formatNumber, formatCell } from '../src/render/format';
 
 const W = 60;
 const H = 60;
@@ -65,6 +65,24 @@ describe('number formatter', () => {
   });
 });
 
+describe('compact cell formatter', () => {
+  it('is short, lowercase, minimal fractions', () => {
+    expect(formatCell(359.23)).toBe('359');
+    expect(formatCell(1500)).toBe('1.5k');
+    expect(formatCell(12300)).toBe('12k');
+    expect(formatCell(359000)).toBe('359k');
+    expect(formatCell(115_400_000)).toBe('115m');
+    expect(formatCell(0.4)).toBe('.4');
+    expect(formatCell(0)).toBe('0');
+    expect(formatCell(7)).toBe('7');
+  });
+  it('never exceeds 4 glyphs for realistic in-cell magnitudes', () => {
+    for (const v of [0, 0.4, 7, 42, 359.23, 999, 1500, 12300, 359000, 1.154e8, 8.7e8, 5e11]) {
+      expect(formatCell(v).length).toBeLessThanOrEqual(4);
+    }
+  });
+});
+
 describe('world gen', () => {
   it('instantiates 10 discrete persons for the player', () => {
     const s = createWorld(123, W, H);
@@ -102,14 +120,24 @@ describe('invariants over a run', () => {
     }
   });
 
-  it('death floor: population <= floor(food) after a starving cycle', () => {
+  it('death floor: population <= floor(food) after a starving cycle (past safe window)', () => {
     const s = createWorld(5, W, H);
+    // advance past the early-game player safety window so full mortality applies
+    s.year = CONFIG.PLAYER_SAFE_YEARS + 5;
     // force everyone to mine (no food) to trigger starvation
     s.markets[0].policy.laborToFoodFrac = 0;
     const rng = makeRng(5);
     tick(s, rng);
     // player food this year was ~0 -> population should have collapsed toward 0
     expect(s.markets[0].population).toBeLessThanOrEqual(Math.floor(s.markets[0].foodThisYear) + 1);
+  });
+
+  it('early-game safety net keeps the player alive through the opening', () => {
+    const s = createWorld(5, W, H);
+    s.markets[0].policy.laborToFoodFrac = 0; // starve on purpose
+    const rng = makeRng(5);
+    for (let i = 0; i < CONFIG.PLAYER_SAFE_YEARS; i++) tick(s, rng);
+    expect(s.markets[0].population).toBeGreaterThanOrEqual(CONFIG.PLAYER_SAFE_FLOOR);
   });
 });
 
@@ -122,11 +150,26 @@ describe('determinism + batch equivalence', () => {
     expect(hash(a)).toBe(hash(b));
   });
 
-  it('100x tick(1) == one tickBatch(100)', () => {
+  it('80x tick(1) == one tickBatch(80) (up to a game-over)', () => {
+    // Mirror tickBatch's early-stop so the equivalence holds even if the game ends mid-run.
+    const ended = (st: WorldState): boolean => {
+      const p = st.markets[0];
+      return (
+        p.population <= 0 ||
+        p.cells.size === 0 ||
+        (st.finalTechYear >= 0 && st.year >= st.finalTechYear + 2)
+      );
+    };
     const a = createWorld(777, W, H);
     const b = createWorld(777, W, H);
     const ra = makeRng(777);
-    for (let i = 0; i < 80; i++) tick(a, ra);
+    // Mirror tickBatch exactly, including the per-turn death accumulator.
+    for (const m of a.markets) m.diedThisTurn = 0;
+    for (let i = 0; i < 80; i++) {
+      tick(a, ra);
+      for (const m of a.markets) m.diedThisTurn += m.diedThisYear;
+      if (ended(a)) break;
+    }
     tickBatch(b, makeRng(777), 80);
     expect(hash(a)).toBe(hash(b));
   });

@@ -6,11 +6,11 @@ import { type Market, type WorldState, refreshDerived } from '../world/state';
 import { RNG_SALT } from '../config';
 import {
   produce,
-  allocateRaw,
   accrueGoods,
   foodDeaths,
   goodsConsumptionAndDeaths,
   updateDesire,
+  burstSpend,
 } from './economy';
 import { births, moveIntents, updatePropensity } from './agents';
 import { resolveMove } from './conflict';
@@ -56,6 +56,9 @@ export function tick(state: WorldState, rng: RNG): void {
     resetAccumulators(m);
     runAiPolicy(state, m, rngAi);
   }
+  // Player forced intervention (market expansion): auto-applied each cycle while affordable.
+  const player0 = state.markets[0];
+  if (player0.isPlayer && player0.policy.forcedIntervention) burstSpend(state, player0);
 
   const deficitCells = new Set<number>();
 
@@ -63,8 +66,7 @@ export function tick(state: WorldState, rng: RNG): void {
   for (const m of state.markets) techUnlock(state, m); // 1
   for (const m of state.markets) births(state, m, rngBirth); // 2
   for (const m of state.markets) {
-    const { food, rawMined } = produce(state, m, deficitCells); // 3
-    allocateRaw(m, rawMined); // 4
+    const food = produce(state, m, deficitCells); // 3 + 4 (production + three-way raw disposition)
     accrueGoods(m); // 5
     foodDeaths(state, m, food, rngFood); // 6
     goodsConsumptionAndDeaths(state, m, rngGoods); // 7
@@ -107,8 +109,11 @@ function endState(state: WorldState): EndState {
 }
 
 export function tickBatch(state: WorldState, rng: RNG, years: number): EndState {
+  // Reset the per-turn death accumulator at the start of the batch; accumulate each year.
+  for (const m of state.markets) m.diedThisTurn = 0;
   for (let i = 0; i < years; i++) {
     tick(state, rng);
+    for (const m of state.markets) m.diedThisTurn += m.diedThisYear;
     const end = endState(state);
     if (end.over) return end;
   }

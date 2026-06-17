@@ -30,28 +30,48 @@ export const CONFIG = {
   MAX_PERSONS: 100_000,
 
   // policy defaults (player starting slider positions)
-  LABOR_TO_FOOD_DEFAULT: 0.5,
-  RAW_TO_RESEARCH_DEFAULT: 0.5,
+  LABOR_TO_FOOD_DEFAULT: 0.5, // labor: food vs mining (raw = 1 - this)
+  // Three-way raw allocation defaults (MUST sum to 1). Disposition of a market's MINABLE raw:
+  //   market -> goods, tech -> research, unmined -> banks in rawStock ("pay dirt" reserve).
+  // Low tech share by default so advancing is a deliberate strategic investment, not automatic.
+  RAW_TO_MARKET_DEFAULT: 0.6,
+  RAW_TO_TECH_DEFAULT: 0.1,
+  RAW_UNMINED_DEFAULT: 0.3,
 
   // tech
-  TECH_MULTIPLIER: 1.5, // ext(level) = TECH_MULTIPLIER ^ level
-  RESEARCH_C0: 10,
-  RESEARCH_R: 1.18, // cost(level) = C0 * r^level
+  TECH_MULTIPLIER: 1.5, // ext(level) = TECH_MULTIPLIER ^ level  (scales RAW->GOODS only)
+  // [DEFAULT] Food is land-limited and decoupled from ext: foodExt(level)=FOOD_TECH_MULTIPLIER^level.
+  // 1.0 = a cell's food carrying capacity never grows with tech, so a growing population MUST
+  // spread across cells. Raise slightly (e.g. 1.03) to let tech ease food pressure over eras.
+  FOOD_TECH_MULTIPLIER: 1.0,
+  // Tech is EXPENSIVE (raw units). Reaching the final tier requires EITHER pouring ~all raw into
+  // research for sustained periods, OR growing territory/throughput first and then redirecting it.
+  // cost(level) = C0 * r^level. Raised from 10 / 1.18 so casual allocation advances slowly.
+  RESEARCH_C0: 100,
+  RESEARCH_R: 1.3,
 
   // desire / propensity
   DESIRE_GROWTH_K: 0.02,
-  DESIRE_CAP: 100,
+  // Soft ceiling only. Desire keeps tracking per-capita wealth so a rich, stagnant market can
+  // have consumption outrun goods and suffer goods-starvation (decadence collapse).
+  DESIRE_CAP: 1_000_000,
   PROPENSITY_RISE: 0.15,
   PROPENSITY_DECAY: 0.1,
   BURST_DECAY: 0.7,
   BURST_BUMP: 0.5,
 
+  // early-game player safety net (AI + wild are unaffected)
+  PLAYER_SAFE_YEARS: 40, // during these opening years the player cannot be driven below the floor
+  PLAYER_SAFE_FLOOR: 5, // minimum surviving player population during the safe window
+  PLAYER_START_FOOD: 10, // start cell food yield is guaranteed fertile (<= FOOD_YIELD_MAX)
+  PLAYER_START_NEIGHBOR_FOOD_MIN: 6, // rook neighbors of the start cell get at least this much food
+
   // conflict
   CONFLICT_GATE: 0.1,
 
   // turn
+  YEARS_PER_TURN_OPTIONS: [10, 50, 250],
   DEFAULT_YEARS_PER_TURN: 10,
-  MAX_YEARS_PER_TURN: 100,
 } as const;
 
 // RNG stream salts (keep stable across refactors for determinism).

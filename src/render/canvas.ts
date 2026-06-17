@@ -2,10 +2,12 @@
 
 import type { Snapshot } from './snapshot';
 import { type Viewport, cellSize, visibleCellRange } from './viewport';
-import { formatNumber } from './format';
+import { formatNumber, formatCell } from './format';
 
 export type ViewMode = 'peoples' | 'food' | 'raw';
 export { formatNumber };
+
+const FONT_FAMILY = 'ui-monospace, Menlo, monospace';
 
 function heatColor(t: number): string {
   // t in [0,1] -> dark blue to bright yellow
@@ -28,7 +30,7 @@ export function draw(
   const { x0, y0, x1, y1 } = visibleCellRange(vp, cw, ch, snap);
 
   const fontPx = Math.max(7, Math.floor(cs * 0.38));
-  ctx.font = `${fontPx}px ui-monospace, Menlo, monospace`;
+  ctx.font = `${fontPx}px ${FONT_FAMILY}`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
 
@@ -63,8 +65,7 @@ export function draw(
         }
         const pop = snap.cellPopulation[i];
         if (pop > 0 && hue >= 0) {
-          const label = formatNumber(pop);
-          drawLabel(ctx, label, sx, sy, cs, fontPx, `hsl(${hue}, 90%, 72%)`);
+          drawLabel(ctx, formatCell(pop), sx, sy, cs, fontPx, `hsl(${hue}, 90%, 72%)`);
         }
       } else {
         const v = mode === 'food' ? snap.foodDisplay[i] : snap.rawDisplay[i];
@@ -73,8 +74,9 @@ export function draw(
         ctx.globalAlpha = 0.55;
         ctx.fillRect(sx, sy, cs, cs);
         ctx.globalAlpha = 1;
-        if (cs >= 24 && v >= 0.5) {
-          drawLabel(ctx, formatNumber(v), sx, sy, cs, fontPx, '#fff');
+        // labels only where they fit; heat color still conveys magnitude when omitted
+        if (cs >= 22 && v >= 0.5) {
+          drawLabel(ctx, formatCell(v), sx, sy, cs, fontPx, '#fff');
         }
       }
     }
@@ -108,11 +110,24 @@ function drawLabel(
 ): void {
   const cx = sx + cs / 2;
   const cy = sy + cs / 2;
+  const maxW = cs - 3;
+
+  // Guarantee the label never overflows the cell: shrink the font to fit; omit if it cannot.
+  let fp = fontPx;
+  let w = ctx.measureText(text).width;
+  if (w > maxW) {
+    fp = Math.floor((fp * maxW) / w);
+    if (fp < 5) return; // too small to be legible at this zoom -> omit (heat/tint still shows)
+    ctx.font = `${fp}px ${FONT_FAMILY}`;
+    w = ctx.measureText(text).width;
+  }
+
   // opaque backing so tint + text never blend into illegibility
-  const w = ctx.measureText(text).width + 4;
-  const h = fontPx + 2;
+  const h = fp + 2;
   ctx.fillStyle = 'rgba(0,0,0,0.78)';
-  ctx.fillRect(cx - w / 2, cy - h / 2, w, h);
+  ctx.fillRect(cx - w / 2 - 1, cy - h / 2, w + 2, h);
   ctx.fillStyle = color;
   ctx.fillText(text, cx, cy);
+
+  if (fp !== fontPx) ctx.font = `${fontPx}px ${FONT_FAMILY}`; // restore for next cells
 }

@@ -7,7 +7,6 @@ export type ToWorker =
   | { type: 'INIT'; seed: number; width: number; height: number }
   | { type: 'LOAD'; payload: SerializedState }
   | { type: 'SET_POLICY'; marketId: number; policy: Policy }
-  | { type: 'BURST_SPEND'; marketId: number }
   | { type: 'TICK'; years: number }
   | { type: 'REQUEST_SNAPSHOT' }
   | { type: 'SAVE' };

@@ -8,7 +8,6 @@ import {
 } from '../world/state';
 import { makeRng, type RNG } from '../world/rng';
 import { tickBatch } from '../sim/tick';
-import { burstSpend } from '../sim/economy';
 import { buildSnapshot } from '../render/snapshot';
 import type { FromWorker, ToWorker } from './protocol';
 
@@ -53,15 +52,18 @@ self.onmessage = (e: MessageEvent<ToWorker>) => {
         const m = world.markets[msg.marketId];
         if (m) {
           m.policy.laborToFoodFrac = clamp01(msg.policy.laborToFoodFrac);
-          m.policy.rawToResearchFrac = clamp01(msg.policy.rawToResearchFrac);
+          // normalize the three-way raw split defensively (UI already keeps it summed to 1)
+          const mk = Math.max(0, msg.policy.rawToMarketFrac);
+          const tc = Math.max(0, msg.policy.rawToTechFrac);
+          const un = Math.max(0, msg.policy.rawUnminedFrac);
+          const sum = mk + tc + un;
+          if (sum > 0) {
+            m.policy.rawToMarketFrac = mk / sum;
+            m.policy.rawToTechFrac = tc / sum;
+            m.policy.rawUnminedFrac = un / sum;
+          }
+          m.policy.forcedIntervention = !!msg.policy.forcedIntervention;
         }
-        break;
-      }
-      case 'BURST_SPEND': {
-        if (!world) break;
-        const m = world.markets[msg.marketId];
-        if (m) burstSpend(world, m);
-        snapshot();
         break;
       }
       case 'TICK': {
