@@ -281,8 +281,6 @@ export function mountSidebar(
           : 'max',
     ],
     ['Population', (s) => formatNumber(s.markets[0].population)],
-    ['Deaths (cumulative)', (s) => formatNumber(s.markets[0].cumulativeDead)],
-    ['Deaths (this turn)', (s) => formatNumber(s.markets[0].diedThisTurn)],
     ['Market size', (s) => `${formatNumber(s.markets[0].cells)} cells`],
     ['Capital Wealth', (s) => formatNumber(s.markets[0].capitalWealth)],
     ['Goods / cycle', (s) => formatNumber(s.markets[0].goodsProduced)],
@@ -294,6 +292,36 @@ export function mountSidebar(
           : '0',
     ],
     ['Orientation', (s) => s.markets[0].orientation.toFixed(2)],
+    // supply vs demand this turn (totals across the batched years)
+    [
+      'Food req / produced',
+      (s) =>
+        `${formatNumber(s.markets[0].foodNeededThisTurn)} / ${formatNumber(
+          s.markets[0].foodProducedThisTurn,
+        )}`,
+    ],
+    [
+      'Goods req / available',
+      (s) =>
+        `${formatNumber(s.markets[0].goodsNeededThisTurn)} / ${formatNumber(
+          s.markets[0].goodsAvailableThisTurn,
+        )}`,
+    ],
+    // deaths split by cause
+    [
+      'Deaths \u2014 food (turn)',
+      (s) => `${formatNumber(s.markets[0].foodDeathsThisTurn)} (\u03a3 ${formatNumber(
+        s.markets[0].foodDeathsTotal,
+      )})`,
+    ],
+    [
+      'Deaths \u2014 goods (turn)',
+      (s) => `${formatNumber(s.markets[0].goodsDeathsThisTurn)} (\u03a3 ${formatNumber(
+        s.markets[0].goodsDeathsTotal,
+      )})`,
+    ],
+    ['Deaths \u2014 total (turn)', (s) => formatNumber(s.markets[0].diedThisTurn)],
+    ['Deaths (cumulative)', (s) => formatNumber(s.markets[0].cumulativeDead)],
   ];
 
   let syncedPolicy = false;

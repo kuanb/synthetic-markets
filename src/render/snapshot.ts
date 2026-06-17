@@ -27,6 +27,15 @@ export interface MarketSummary {
   diedThisYear: number;
   diedThisTurn: number;
   cumulativeDead: number;
+  // per-turn supply/demand + deaths by cause (totals across the most recent End Turn batch)
+  foodNeededThisTurn: number;
+  foodProducedThisTurn: number;
+  goodsNeededThisTurn: number;
+  goodsAvailableThisTurn: number;
+  foodDeathsThisTurn: number;
+  goodsDeathsThisTurn: number;
+  foodDeathsTotal: number;
+  goodsDeathsTotal: number;
   orientation: number;
   // current policy (so the UI can reflect a loaded save)
   laborToFoodFrac: number;
@@ -115,6 +124,14 @@ export function buildSnapshot(s: WorldState): Snapshot {
     diedThisYear: m.diedThisYear,
     diedThisTurn: m.diedThisTurn,
     cumulativeDead: m.isPlayer ? playerDead : 0,
+    foodNeededThisTurn: m.foodNeededThisTurn,
+    foodProducedThisTurn: m.foodProducedThisTurn,
+    goodsNeededThisTurn: m.goodsNeededThisTurn,
+    goodsAvailableThisTurn: m.goodsAvailableThisTurn,
+    foodDeathsThisTurn: m.foodDeathsThisTurn,
+    goodsDeathsThisTurn: m.goodsDeathsThisTurn,
+    foodDeathsTotal: m.foodDeathsTotal,
+    goodsDeathsTotal: m.goodsDeathsTotal,
     orientation: orientation(m),
     laborToFoodFrac: m.policy.laborToFoodFrac,
     rawToMarketFrac: m.policy.rawToMarketFrac,
