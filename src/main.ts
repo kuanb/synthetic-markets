@@ -90,14 +90,23 @@ function restart(): void {
   centered = false;
   gameOver = false;
   pendingTick = false;
+  lastEventCount = -1; // re-seed the Chronicle for the new world
   // drop any game-over summary overlay
   document.querySelectorAll('[data-sm-overlay]').forEach((n) => n.remove());
   const seed = Math.floor(Math.random() * 1_000_000_000);
   send({ type: 'INIT', seed, width: MAP_W, height: MAP_H });
 }
 
+// After an allocation change the worker logs a (coalesced) policy event but does not snapshot on
+// its own; request a refreshed snapshot once the user settles (debounced) so the Chronicle updates
+// without rebuilding a snapshot on every slider drag step.
+let policySnapTimer: ReturnType<typeof setTimeout> | undefined;
 const sidebar = mountSidebar(sidebarRoot, {
-  onPolicyChange: (p) => send({ type: 'SET_POLICY', marketId: 0, policy: p }),
+  onPolicyChange: (p) => {
+    send({ type: 'SET_POLICY', marketId: 0, policy: p });
+    clearTimeout(policySnapTimer);
+    policySnapTimer = setTimeout(() => send({ type: 'REQUEST_SNAPSHOT' }), 350);
+  },
   onEndTurn: (y) => {
     years = y;
     sendTick();
@@ -141,6 +150,7 @@ worker.onmessage = (e: MessageEvent<FromWorker>) => {
       }
       sidebar.update(snap);
       charts.update(snap.log);
+      updateEvents(snap);
       redraw();
       if (msg.type === 'GAME_OVER') {
         gameOver = true;
@@ -327,6 +337,97 @@ historyHead.style.cssText =
 historyWrap.appendChild(historyHead);
 const charts = mountCharts(historyWrap);
 stage.appendChild(historyWrap);
+
+// ---- Chronicle: major historical events (TOP-RIGHT overlay), starting with the Epoch ----
+const EVENT_COLOR: Record<string, string> = {
+  epoch: '#cdd6e0',
+  tech: '#b79be6',
+  intervention: '#e6b87f',
+  boom: '#7fe0a0',
+  dieoff: '#e68a8a',
+  encounter: '#7fd6d6',
+  policy: '#9fb0c0',
+};
+const chronicleWrap = document.createElement('div');
+chronicleWrap.style.cssText =
+  'position:absolute;top:12px;right:12px;width:300px;max-height:calc(100% - 24px);overflow-y:auto;' +
+  'background:rgba(8,8,8,0.85);border:1px solid #2a2a2a;border-radius:4px;padding:8px 10px;' +
+  'opacity:0.95;z-index:15;';
+const chronicleHead = document.createElement('div');
+chronicleHead.textContent = 'Chronicle \u00b7 major events';
+chronicleHead.style.cssText =
+  'color:#9aa;font-size:11px;letter-spacing:0.04em;text-transform:uppercase;margin-bottom:6px;';
+chronicleWrap.appendChild(chronicleHead);
+const chronicleList = document.createElement('div');
+chronicleWrap.appendChild(chronicleList);
+stage.appendChild(chronicleWrap);
+
+function renderChronicle(events: Snapshot['events']): void {
+  chronicleList.innerHTML = '';
+  for (const ev of events) {
+    const row = document.createElement('div');
+    row.style.cssText =
+      'display:flex;gap:6px;align-items:baseline;margin:3px 0;font-size:11px;line-height:1.35;';
+    const yr = document.createElement('span');
+    yr.textContent = `y${ev.year}`;
+    yr.style.cssText = 'color:#667;flex:0 0 auto;min-width:34px;font-variant-numeric:tabular-nums;';
+    const txt = document.createElement('span');
+    txt.textContent = ev.text;
+    txt.style.cssText = `color:${EVENT_COLOR[ev.kind] ?? '#cdd6e0'};`;
+    row.appendChild(yr);
+    row.appendChild(txt);
+    chronicleList.appendChild(row);
+  }
+  // keep the newest events in view
+  chronicleWrap.scrollTop = chronicleWrap.scrollHeight;
+}
+
+// Transient "alert card" for Forced-Intervention events: slides in at top-center, auto-dismisses.
+const alertCard = document.createElement('div');
+alertCard.style.cssText =
+  'position:absolute;top:58px;left:50%;transform:translateX(-50%) translateY(-8px);' +
+  'max-width:70%;display:none;opacity:0;transition:opacity 0.25s, transform 0.25s;z-index:30;' +
+  'background:rgba(40,28,8,0.96);border:1px solid #e6b87f;border-radius:6px;padding:10px 14px;' +
+  'color:#f0dcb8;font:13px ui-monospace,Menlo,monospace;line-height:1.4;text-align:center;' +
+  'box-shadow:0 4px 18px rgba(0,0,0,0.6);';
+stage.appendChild(alertCard);
+let alertTimer: ReturnType<typeof setTimeout> | undefined;
+function showAlert(text: string): void {
+  alertCard.innerHTML = `<b style="color:#ffd9a0">\u26a1 Forced Intervention</b><br/>${text}`;
+  alertCard.style.display = 'block';
+  // next frame: fade/slide in
+  requestAnimationFrame(() => {
+    alertCard.style.opacity = '1';
+    alertCard.style.transform = 'translateX(-50%) translateY(0)';
+  });
+  clearTimeout(alertTimer);
+  alertTimer = setTimeout(() => {
+    alertCard.style.opacity = '0';
+    alertCard.style.transform = 'translateX(-50%) translateY(-8px)';
+    setTimeout(() => (alertCard.style.display = 'none'), 300);
+  }, 6000);
+}
+
+// Track how many events we've already shown so new ones can trigger the transient alert. -1 means
+// "not yet initialized" — the first snapshot seeds the count without alerting on pre-existing
+// events (e.g. after loading a save).
+let lastEventCount = -1;
+function updateEvents(snap: Snapshot): void {
+  const events = snap.events ?? [];
+  renderChronicle(events);
+  if (lastEventCount < 0) {
+    lastEventCount = events.length;
+    return;
+  }
+  if (events.length > lastEventCount) {
+    let latestIntervention: string | null = null;
+    for (let i = lastEventCount; i < events.length; i++) {
+      if (events[i].kind === 'intervention') latestIntervention = events[i].text;
+    }
+    if (latestIntervention) showAlert(latestIntervention);
+  }
+  lastEventCount = events.length;
+}
 
 // hover tooltip: full precise values for the hovered cell
 const tip = document.createElement('div');
