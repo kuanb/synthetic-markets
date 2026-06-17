@@ -7,7 +7,7 @@
 //    (no horizontal scrollbar — it disrupted the overlay layout).
 //
 // Each chart's label reports `now` (latest year), `avg10` (trailing 10-year mean) and `peak`
-// (max over the visible window) so the current position is legible at a glance. Hovering a chart
+// (all-time max over the full history) so the current position is legible at a glance. Hovering a chart
 // shows a crosshair + tooltip with the exact year and value under the cursor.
 
 import type { YearLog } from '../world/state';
@@ -66,7 +66,8 @@ export function mountCharts(root: HTMLElement): { update(log: YearLog[]): void }
     log: YearLog[];
     start: number; // first visible log index
     pxPerYear: number;
-    windowMax: number;
+    windowMax: number; // max over the VISIBLE window (drives y-axis scaling)
+    allTimeMax: number; // max over the FULL history (drives the "peak" label)
   }
 
   const charts: ChartEls[] = DEFS.map((def) => {
@@ -89,7 +90,16 @@ export function mountCharts(root: HTMLElement): { update(log: YearLog[]): void }
     wrap.appendChild(plot);
     root.appendChild(wrap);
 
-    const c: ChartEls = { def, stats, canvas, log: [], start: 0, pxPerYear: 1, windowMax: 1 };
+    const c: ChartEls = {
+      def,
+      stats,
+      canvas,
+      log: [],
+      start: 0,
+      pxPerYear: 1,
+      windowMax: 1,
+      allTimeMax: 1,
+    };
 
     // Hover -> crosshair + tooltip with the exact year/value under the cursor.
     const onMove = (ev: MouseEvent) => {
@@ -144,15 +154,19 @@ export function mountCharts(root: HTMLElement): { update(log: YearLog[]): void }
     const span = Math.max(MIN_WINDOW, visibleCount);
     const pxPerYear = cssW / span;
 
+    // windowMax scales the visible line; allTimeMax (over ALL history) feeds the "peak" label.
     let windowMax = 1;
-    for (let i = start; i < total; i++) {
+    let allTimeMax = 1;
+    for (let i = 0; i < total; i++) {
       const v = c.def.pick(log[i]);
-      if (v > windowMax) windowMax = v;
+      if (v > allTimeMax) allTimeMax = v;
+      if (i >= start && v > windowMax) windowMax = v;
     }
 
     c.start = start;
     c.pxPerYear = pxPerYear;
     c.windowMax = windowMax;
+    c.allTimeMax = allTimeMax;
 
     const yOf = (v: number) => CHART_H - 3 - (v / windowMax) * (CHART_H - 10);
     const xOf = (i: number) => (i - start) * pxPerYear;
@@ -198,7 +212,7 @@ export function mountCharts(root: HTMLElement): { update(log: YearLog[]): void }
     const avg = sum / n;
     c.stats.innerHTML =
       `now <b>${formatNumber(now)}</b> \u00b7 avg10 <b>${formatNumber(avg)}</b> ` +
-      `\u00b7 peak <b>${formatNumber(c.windowMax)}</b>`;
+      `\u00b7 peak <b>${formatNumber(c.allTimeMax)}</b>`;
   }
 
   return {
