@@ -94,7 +94,10 @@ goods slider; consumption flows directly out of `capitalWealth`.
 > market is always id `0`.
 
 Terrain (`foodYield`, `rawYield`) is **spatially autocorrelated value/simplex noise** derived
-from the world seed (reproducible peaks and valleys). Hidden until `discovered`.
+from the world seed (reproducible peaks and valleys). Hidden until `discovered`. **[DEFAULT]
+Food floor:** cells whose noise `≥ FOOD_FLOOR_FBM` (~85% of the map) are lifted to at least
+`FOOD_YIELD_FLOOR` (=1) so they can support ≥1 person — this curbs pure-food collapse spikes
+while leaving the barren ~15% (valleys) below 1, keeping food the primary spatial constraint.
 
 ### 2.4 Person — **discrete individual agents** in a Struct-of-Arrays pool  **[FREEZE]**
 
@@ -253,17 +256,24 @@ stated.
 ### `config.ts` — every `[TUNABLE]` constant (no magic numbers anywhere else)
 ```ts
 export const CONFIG = {
-  // world gen
-  WIDTH: 800, HEIGHT: 800, CELL_PX: 32,
+  // world gen — map default 300x300 (MAP_MIN_SIZE floor enforced at boot)
+  WIDTH: 300, HEIGHT: 300, MAP_MIN_SIZE: 300, CELL_PX: 32,
   PLAYER_START_POP: 10, PLAYER_EDGE_MARGIN: 10,
-  AI_MARKET_COUNT: 4, AI_START_POP: 5,
-  WILD_PERSON_COUNT: 200, WILD_GROUP_AVG_SIZE: 8,
+  // Market density: AI count is DERIVED -> floor(W*H / CELLS_PER_MARKET) - 1 (player). The
+  // "literal" target was 1:25 (~3600 markets on 300x300) but the discrete-agent sim made a
+  // 250-year batch take MINUTES; CELLS_PER_MARKET=900 (~100 markets) keeps it ~4.5s. (Tunable.)
+  CELLS_PER_MARKET: 900, AI_MARKET_COUNT: 4 /* legacy fallback */, AI_START_POP: 5,
+  // World density: ~WILD_CELL_DENSITY of cells seeded with WILD_CELL_MIN..MAX persons. Literal
+  // target ~0.5; default 0.1 for responsiveness (perf-bound by population, not cells). (Tunable.)
+  WILD_CELL_DENSITY: 0.1, WILD_CELL_MIN: 1, WILD_CELL_MAX: 3,
   // noise
   NOISE_OCTAVES: 4, NOISE_FREQUENCY: 0.012, NOISE_LACUNARITY: 2.0, NOISE_GAIN: 0.5,
   FOOD_YIELD_MAX: 10, RAW_YIELD_MAX: 10,
+  // food floor: cells with noise >= FOOD_FLOOR_FBM (~85%) lifted to >=FOOD_YIELD_FLOOR (support 1)
+  FOOD_YIELD_FLOOR: 1, FOOD_FLOOR_FBM: 0.30,
   // persons (homogeneous constants; each person shares these)
   LABOR_CAPACITY: 2, MOBILITY: 1, BIRTH_RATE: 0.1, VIEW_RANGE: 1,
-  MAX_PERSONS: 100_000,              // global cap (discrete agents; every tick scans the pool O(N))
+  MAX_PERSONS: 80_000,               // global cap (discrete agents; every tick scans the pool O(N))
   // policy defaults — three-way raw allocation (sum to 1); low tech share so tech is deliberate
   LABOR_TO_FOOD_DEFAULT: 0.5,
   RAW_TO_MARKET_DEFAULT: 0.6, RAW_TO_TECH_DEFAULT: 0.1, RAW_UNMINED_DEFAULT: 0.3,
@@ -638,10 +648,11 @@ else:
 
 ### 5.6 Non-player markets (AI)  **[DEFAULT — resolved]**
 
-At world gen seed `AI_MARKET_COUNT` AI markets (each 1 cell + `AI_START_POP` discrete persons),
-each with random `propensityToExpand ∈ [0,1]`. Also scatter `WILD_PERSON_COUNT` discrete wild
-persons in small groups (avg `WILD_GROUP_AVG_SIZE`, each its own `groupId`/hue) per §7.
-`runAiPolicy` each year sets the AI's labor split + three-way raw split:
+At world gen seed a **derived** count of AI markets — `floor(width*height / CELLS_PER_MARKET) - 1`
+(the player is the remaining market) — each 1 cell + `AI_START_POP` discrete persons with random
+`propensityToExpand ∈ [0,1]`. Also seed wild people by density: ~`WILD_CELL_DENSITY` of unowned
+cells get a small group (`WILD_CELL_MIN..MAX`, each its own `groupId`/hue). `runAiPolicy` each
+year sets the AI's labor split + three-way raw split:
 
 - Labor: food-first using `foodExt` (not `ext`) — `laborToFoodFrac` ≈ fraction yielding
   `food ≈ population`, clamped [0,1]; remainder is mining capacity.
@@ -673,19 +684,19 @@ The bump decays per §5.3 step 10 → a migration pulse, not permanent.
 desktop; relocates to the **bottom** on mobile/portrait (CSS media query).
 
 **World view.**
-- Cells render at **32px** (zoom 1) or **16px** (zoom 2). **Exactly two zoom levels.**
-- Fog: undiscovered = blank. Discovered-but-unowned = **last-known snapshot** (worker keeps a
-  `lastKnown*` shadow updated only for player-visible cells). Owned = **live**.
-- Pan: **arrow keys** + **on-screen arrow buttons** (mobile portrait).
-- Cell contents are **text only**. Person cells show **population count** (`formatNumber`),
-  colored by owning market hue (or most-populous wild group's hue). Market-owned cells get the
-  market's light/transparent tint with a small **opaque backing rect** behind the text so tint
-  + text never blend into illegibility.
+- **FOUR zoom levels, INVERTED** (highest = most zoomed IN): `cellSize = CELL_PX / 2^(4-zoom)` →
+  4× = 32px (start), 3× = 16px, 2× = 8px, 1× = 4px. Buttons live on the **map overlay**.
+- **Camera never shows out-of-bounds**: clamp so the visible window stays within the map; when the
+  whole map is smaller than the canvas in a dimension, **center** it and render the surplus as
+  solid black. Grid lines are drawn **only within the map extent** (both axes), never across black.
+- Fog: undiscovered = blank. Owned = **live**; adjacent markets become visible via player vision.
+- Pan: **arrow keys** + **on-screen arrow pad** (with a center-on-largest-blob button).
+- Cell contents are **text only**, colored by owning market hue (or most-populous wild group).
 
-**View modes (sidebar toggle):**
-- **Peoples** — population count + color per cell.
-- **Food yield** — `foodYield × foodExt(techLevel)` (discovered cells only).
-- **Raw materials yield** — `rawYield + rawStock` (discovered cells only).
+**View modes** — a **top-center overlay on the map** (not the sidebar):
+- **Population / Markets** — population count + color per cell.
+- **Food** — `foodYield × foodExt(techLevel)` (discovered cells only).
+- **Raw Materials** — `rawYield + rawStock` (discovered cells only).
 
 In-cell numbers use the **compact** `formatCell` formatter (≤4 glyphs, e.g. `359`, `1.5k`,
 `115m`), auto-shrunk to fit and omitted at 16px if they can't; a **hover tooltip** over the map
@@ -707,8 +718,8 @@ goods-to-people control. The player's "growth vs restraint" posture (which drive
 emergent from how hard they mine and where mined raw goes, captured by `orientation`.
 
 Plus **Years per turn** — exactly **three** options: **10 / 50 / 250** (default 10). **Zoom**
-(1× / 2×) lives on the **map overlay** next to the arrow pad, not in the sidebar. **End Turn**
-posts `{type:'TICK', years}` and redraws on `SNAPSHOT`.
+(1×–4×) lives on the **map overlay** next to the arrow pad, not in the sidebar. **End Turn**
+posts `{type:'TICK', years}` and redraws on `SNAPSHOT`. An **auto-play** toggle repeats turns.
 
 **Sidebar live stats:** Year, current tech name + research progress
 (`techProgress / researchCost(next)`), population, market size (cells), Capital Wealth, goods
@@ -724,8 +735,15 @@ years — chosen as the most legible aggregate):
 This makes the cause of any die-off (food vs goods/desire starvation) immediately visible.
 Large numbers via `formatNumber`.
 
+**Live mini-charts.** A `History · per year` panel renders five small line charts from the
+player's full per-year log (shipped in the `Snapshot`): Population, Raw mined/yr, Food
+produced/yr, Market goods/yr, Tech invested/yr. The x-axis shows a window of **≥100 years**
+(empty right early on) that grows to **1000**; beyond 1000 years each chart becomes a
+horizontally **scrollable** 1000-year window, auto-scrolled fully right on each new turn. (This
+requires `YearLog` to carry `rawMined` + `techInvested`, recorded each tick.)
+
 **Start condition.** Player market id 0 = 1 cell, 10 discrete persons, placed ≥10 cells from
-every edge. First researchable tech = the Hoe (level 1).
+every edge, on a guaranteed-fertile start cell. First researchable tech = the Hoe (level 1).
 
 **End conditions.**
 - **Win / completion:** the player market researches the **final** technology (level 45), runs
@@ -749,10 +767,11 @@ every edge. First researchable tech = the Hoe (level 1).
   `WorldState` (seed + all typed arrays incl. the person pool + markets + `rngState`). Typed
   arrays → base64. On load, `deserialize` restores exactly (including `rngState`), so continuing
   a save is bit-identical to never having stopped.
-- **World gen:** 1 player market (1 cell, 10 discrete persons, ≥10 cells from any edge),
-  `AI_MARKET_COUNT` AI markets (1 cell + `AI_START_POP` persons, random `propensityToExpand`),
-  `WILD_PERSON_COUNT` discrete wild persons in small groups. Map default 800×800, cell 32px —
-  all in `config.ts`.
+- **World gen:** 1 player market (1 cell, 10 discrete persons, ≥10 cells from any edge, on a
+  fertile start cell), a **derived** `floor(W*H/CELLS_PER_MARKET)-1` AI markets, and wild people
+  seeded at `WILD_CELL_DENSITY`. Map default **300×300** (floored at `MAP_MIN_SIZE`), cell 32px.
+  `createWorld(seed, w, h, opts?)` accepts optional `{wildCellDensity, aiMarkets}` overrides
+  (used by tests for sparse, isolated economies). All knobs in `config.ts`.
 
 ---
 
