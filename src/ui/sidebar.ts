@@ -21,6 +21,7 @@ export interface SidebarCallbacks {
   onYearsChange(years: number): void;
   onAutoPlayChange(enabled: boolean): void;
   onRestart(): void;
+  onOpenSettings(): void;
 }
 
 const css = `
@@ -146,7 +147,21 @@ export function mountSidebar(
 
   root.className = 'sm-sidebar';
   root.innerHTML = '';
-  root.appendChild(el('h1', undefined, 'SYNTHETIC MARKETS'));
+  // Header row: title + a Settings gear in the sidebar's top-right (its natural home).
+  const header = el('div');
+  header.style.cssText =
+    'display:flex;justify-content:space-between;align-items:center;margin:0 0 12px;';
+  const title = el('h1', undefined, 'SYNTHETIC MARKETS');
+  title.style.margin = '0';
+  const gear = el('button', undefined, '\u2699');
+  gear.title = 'Settings';
+  gear.style.cssText =
+    'flex:0 0 auto;width:30px;height:30px;background:#111;color:#ccc;border:1px solid #2a2a2a;' +
+    'border-radius:4px;font-size:16px;line-height:1;cursor:pointer;';
+  gear.onclick = () => cb.onOpenSettings();
+  header.appendChild(title);
+  header.appendChild(gear);
+  root.appendChild(header);
   // (View-mode selector now lives as a top-center overlay on the map, not in the sidebar.)
 
   // ----- Policy section: Labor box, Raw allocation box, Forced intervention -----

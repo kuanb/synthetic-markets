@@ -146,6 +146,7 @@ const sidebar = mountSidebar(sidebarRoot, {
     else clearTimeout(autoTimer);
   },
   onRestart: startNewGame,
+  onOpenSettings: openSettings,
 });
 
 function findPlayerCell(s: Snapshot): number {
@@ -398,7 +399,7 @@ const EVENT_COLOR: Record<string, string> = {
 };
 const chronicleWrap = document.createElement('div');
 chronicleWrap.style.cssText =
-  'position:absolute;top:54px;right:12px;width:300px;max-height:50%;overflow-y:auto;' +
+  'position:absolute;top:12px;right:12px;width:300px;max-height:50%;overflow-y:auto;' +
   'background:rgba(8,8,8,0.85);border:1px solid #2a2a2a;border-radius:4px;padding:8px 10px;' +
   'opacity:0.95;z-index:15;';
 const chronicleHead = document.createElement('div');
@@ -418,14 +419,6 @@ const ABOUT_PARAGRAPHS: string[] = [
   'The goal is not to model the real world accurately. Instead, it is to explore how complex economic systems can emerge from simple rules, and how growth, technology, markets, and political intervention shape one another over time.',
   'Think of it less as a game and more as a toy model for asking: what actually drives markets?',
 ];
-
-const gearBtn = document.createElement('button');
-gearBtn.textContent = '\u2699'; // gear
-gearBtn.title = 'Settings';
-gearBtn.style.cssText =
-  'position:absolute;top:12px;right:12px;width:34px;height:34px;z-index:16;cursor:pointer;' +
-  'background:rgba(8,8,8,0.85);color:#ccc;border:1px solid #2a2a2a;border-radius:4px;font-size:18px;line-height:1;';
-stage.appendChild(gearBtn);
 
 function openSettings(): void {
   const overlay = document.createElement('div');
@@ -572,7 +565,6 @@ function openSettings(): void {
   overlay.appendChild(card);
   document.body.appendChild(overlay);
 }
-gearBtn.onclick = openSettings;
 
 function renderChronicle(events: Snapshot['events']): void {
   chronicleList.innerHTML = '';
