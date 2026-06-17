@@ -2,14 +2,18 @@
 
 import { CONFIG } from '../config';
 
+export type ZoomLevel = 1 | 2 | 3;
+
 export interface Viewport {
   camX: number;
   camY: number;
-  zoom: 1 | 2;
+  zoom: ZoomLevel;
 }
 
+// Each zoom level halves the cell size (doubles the cells on screen):
+// zoom 1 -> 32px, zoom 2 -> 16px, zoom 3 -> 8px.
 export function cellSize(vp: Viewport): number {
-  return CONFIG.CELL_PX / vp.zoom; // zoom 1 -> 32px, zoom 2 -> 16px
+  return CONFIG.CELL_PX / Math.pow(2, vp.zoom - 1);
 }
 
 export interface CellRange {
@@ -58,7 +62,7 @@ export function pan(
   };
 }
 
-export function setZoom(vp: Viewport, zoom: 1 | 2): Viewport {
+export function setZoom(vp: Viewport, zoom: ZoomLevel): Viewport {
   return { ...vp, zoom };
 }
 

@@ -164,14 +164,14 @@ stage.appendChild(pad);
 const zoomWrap = document.createElement('div');
 zoomWrap.style.cssText =
   'position:absolute;bottom:12px;right:12px;display:flex;gap:4px;opacity:.9;';
-const zoomButtons = new Map<1 | 2, HTMLButtonElement>();
+const zoomButtons = new Map<1 | 2 | 3, HTMLButtonElement>();
 const paintZoom = () => {
   for (const [z, b] of zoomButtons) {
     b.style.background = z === viewport.zoom ? '#1d3a4d' : '#111';
     b.style.borderColor = z === viewport.zoom ? '#2f6e92' : '#2a2a2a';
   }
 };
-([1, 2] as const).forEach((z) => {
+([1, 2, 3] as const).forEach((z) => {
   const b = document.createElement('button');
   b.textContent = `${z}\u00d7`;
   b.style.cssText = `width:40px;height:40px;color:#ccc;border:1px solid #2a2a2a;border-radius:3px;font:inherit;cursor:pointer;`;
