@@ -4,7 +4,6 @@
 
 import type { Snapshot } from '../render/snapshot';
 import { formatNumber } from '../render/format';
-import { mountCharts } from './charts';
 import { CONFIG } from '../config';
 
 export interface PolicyInput {
@@ -256,12 +255,6 @@ export function mountSidebar(
   statSec.appendChild(stats);
   root.appendChild(statSec);
 
-  // ----- live mini-charts (per-year player history) -----
-  const chartSec = el('div', 'sm-sec');
-  chartSec.appendChild(el('div', 'sm-head', 'History \u00b7 per year'));
-  const charts = mountCharts(chartSec);
-  root.appendChild(chartSec);
-
   // ----- game: force end / restart -----
   const gameSec = el('div', 'sm-sec');
   gameSec.appendChild(el('div', 'sm-head', 'Game'));
@@ -368,8 +361,6 @@ export function mountSidebar(
             `<div class="sm-row"><span>${label}</span><span>${fn(snap)}</span></div>`,
         )
         .join('');
-
-      charts.update(snap.log);
     },
     setAutoPlay(on: boolean) {
       autoOn = on;

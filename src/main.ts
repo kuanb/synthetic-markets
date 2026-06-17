@@ -13,6 +13,7 @@ import {
 } from './render/viewport';
 import { formatNumber } from './render/format';
 import { mountSidebar } from './ui/sidebar';
+import { mountCharts } from './ui/charts';
 import { showSummary } from './ui/stats';
 import { load, save, clear, type SerializedState } from './persistence';
 import type { FromWorker, ToWorker } from './worker/protocol';
@@ -139,6 +140,7 @@ worker.onmessage = (e: MessageEvent<FromWorker>) => {
         centered = true;
       }
       sidebar.update(snap);
+      charts.update(snap.log);
       redraw();
       if (msg.type === 'GAME_OVER') {
         gameOver = true;
@@ -310,6 +312,21 @@ viewDefs.forEach(([m, label]) => {
 });
 paintView();
 stage.appendChild(viewWrap);
+
+// history mini-charts — TOP-LEFT overlay on the map (moved out of the sidebar for visibility).
+// Driven from the SNAPSHOT handler below via charts.update(snap.log).
+const historyWrap = document.createElement('div');
+historyWrap.style.cssText =
+  'position:absolute;top:12px;left:12px;width:300px;max-height:calc(100% - 160px);overflow-y:auto;' +
+  'background:rgba(8,8,8,0.85);border:1px solid #2a2a2a;border-radius:4px;padding:8px 10px;' +
+  'opacity:0.95;z-index:15;';
+const historyHead = document.createElement('div');
+historyHead.textContent = 'History \u00b7 per year';
+historyHead.style.cssText =
+  'color:#9aa;font-size:11px;letter-spacing:0.04em;text-transform:uppercase;margin-bottom:2px;';
+historyWrap.appendChild(historyHead);
+const charts = mountCharts(historyWrap);
+stage.appendChild(historyWrap);
 
 // hover tooltip: full precise values for the hovered cell
 const tip = document.createElement('div');
