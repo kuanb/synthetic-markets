@@ -5,7 +5,8 @@ import { CONFIG } from './config';
 import { draw, type ViewMode } from './render/canvas';
 import {
   type Viewport,
-  cellSize,
+  type ZoomLevel,
+  screenToCell,
   centerOn,
   pan as panViewport,
   setZoom,
@@ -31,7 +32,7 @@ app.appendChild(sidebarRoot);
 
 const ctx = canvas.getContext('2d')!;
 
-let viewport: Viewport = { camX: 0, camY: 0, zoom: 1 };
+let viewport: Viewport = { camX: 0, camY: 0, zoom: 4 }; // start fully zoomed IN (32px cells)
 let mode: ViewMode = 'peoples';
 let snap: Snapshot | null = null;
 let lastSaved: SerializedState | null = null;
@@ -44,6 +45,10 @@ let pendingTick = false;
 let years: number = CONFIG.DEFAULT_YEARS_PER_TURN;
 let autoTimer: ReturnType<typeof setTimeout> | undefined;
 const AUTO_DELAY_MS = 120;
+
+// Enforce the minimum map size floor (300) if a smaller size is ever configured.
+const MAP_W = Math.max(CONFIG.MAP_MIN_SIZE, CONFIG.WIDTH);
+const MAP_H = Math.max(CONFIG.MAP_MIN_SIZE, CONFIG.HEIGHT);
 
 const worker = new Worker(new URL('./worker/simWorker.ts', import.meta.url), {
   type: 'module',
@@ -87,15 +92,11 @@ function restart(): void {
   // drop any game-over summary overlay
   document.querySelectorAll('[data-sm-overlay]').forEach((n) => n.remove());
   const seed = Math.floor(Math.random() * 1_000_000_000);
-  send({ type: 'INIT', seed, width: CONFIG.WIDTH, height: CONFIG.HEIGHT });
+  send({ type: 'INIT', seed, width: MAP_W, height: MAP_H });
 }
 
 const sidebar = mountSidebar(sidebarRoot, {
   onPolicyChange: (p) => send({ type: 'SET_POLICY', marketId: 0, policy: p }),
-  onViewMode: (m) => {
-    mode = m;
-    redraw();
-  },
   onEndTurn: (y) => {
     years = y;
     sendTick();
@@ -166,7 +167,7 @@ function panBy(dx: number, dy: number): void {
     viewport,
     dx,
     dy,
-    snap ?? { width: CONFIG.WIDTH, height: CONFIG.HEIGHT },
+    snap ?? { width: MAP_W, height: MAP_H },
     canvas.width,
     canvas.height,
   );
@@ -252,21 +253,22 @@ centerBtn.onclick = centerOnLargestBlob;
 pad.appendChild(centerBtn);
 stage.appendChild(pad);
 
-// zoom controls (map-view controls -> live on the map overlay, not the sidebar)
+// zoom controls (map-view controls -> live on the map overlay, not the sidebar).
+// FOUR levels, inverted: 4x = most zoomed in (32px), 1x = most zoomed out (4px). Starts at 4x.
 const zoomWrap = document.createElement('div');
 zoomWrap.style.cssText =
   'position:absolute;bottom:12px;right:12px;display:flex;gap:4px;opacity:.9;';
-const zoomButtons = new Map<1 | 2 | 3, HTMLButtonElement>();
+const zoomButtons = new Map<ZoomLevel, HTMLButtonElement>();
 const paintZoom = () => {
   for (const [z, b] of zoomButtons) {
     b.style.background = z === viewport.zoom ? '#1d3a4d' : '#111';
     b.style.borderColor = z === viewport.zoom ? '#2f6e92' : '#2a2a2a';
   }
 };
-([1, 2, 3] as const).forEach((z) => {
+([1, 2, 3, 4] as const).forEach((z) => {
   const b = document.createElement('button');
   b.textContent = `${z}\u00d7`;
-  b.style.cssText = `width:40px;height:40px;color:#ccc;border:1px solid #2a2a2a;border-radius:3px;font:inherit;cursor:pointer;`;
+  b.style.cssText = `width:36px;height:36px;color:#ccc;border:1px solid #2a2a2a;border-radius:3px;font:inherit;cursor:pointer;`;
   b.onclick = () => {
     viewport = setZoom(viewport, z);
     paintZoom();
@@ -277,6 +279,37 @@ const paintZoom = () => {
 });
 paintZoom();
 stage.appendChild(zoomWrap);
+
+// view-mode selector — centered overlay at the TOP-CENTER of the map (moved out of the sidebar).
+const viewWrap = document.createElement('div');
+viewWrap.style.cssText =
+  'position:absolute;top:12px;left:50%;transform:translateX(-50%);display:flex;gap:4px;opacity:.92;';
+const viewDefs: Array<[ViewMode, string]> = [
+  ['peoples', 'Population / Markets'],
+  ['food', 'Food'],
+  ['raw', 'Raw Materials'],
+];
+const viewButtons = new Map<ViewMode, HTMLButtonElement>();
+const paintView = () => {
+  for (const [m, b] of viewButtons) {
+    b.style.background = m === mode ? '#1d3a4d' : 'rgba(8,8,8,0.85)';
+    b.style.borderColor = m === mode ? '#2f6e92' : '#2a2a2a';
+  }
+};
+viewDefs.forEach(([m, label]) => {
+  const b = document.createElement('button');
+  b.textContent = label;
+  b.style.cssText = `padding:7px 12px;color:#ccc;border:1px solid #2a2a2a;border-radius:3px;font:inherit;cursor:pointer;`;
+  b.onclick = () => {
+    mode = m;
+    paintView();
+    redraw();
+  };
+  viewButtons.set(m, b);
+  viewWrap.appendChild(b);
+});
+paintView();
+stage.appendChild(viewWrap);
 
 // hover tooltip: full precise values for the hovered cell
 const tip = document.createElement('div');
@@ -303,10 +336,10 @@ canvas.addEventListener('mousemove', (e) => {
   const rect = canvas.getBoundingClientRect();
   const mx = e.clientX - rect.left;
   const my = e.clientY - rect.top;
-  const cs = cellSize(viewport);
-  const cellX = viewport.camX + Math.floor(mx / cs);
-  const cellY = viewport.camY + Math.floor(my / cs);
-  if (cellX < 0 || cellY < 0 || cellX >= snap.width || cellY >= snap.height) return hideTip();
+  const hit = screenToCell(viewport, canvas.width, canvas.height, snap, mx, my);
+  if (!hit) return hideTip();
+  const cellX = hit.x;
+  const cellY = hit.y;
   const i = cellY * snap.width + cellX;
   if (!snap.discovered[i]) return hideTip();
 
@@ -348,7 +381,7 @@ if (saved) {
   send({ type: 'LOAD', payload: saved });
 } else {
   const seed = Math.floor(Math.random() * 1_000_000_000);
-  send({ type: 'INIT', seed, width: CONFIG.WIDTH, height: CONFIG.HEIGHT });
+  send({ type: 'INIT', seed, width: MAP_W, height: MAP_H });
 }
 
 resize();

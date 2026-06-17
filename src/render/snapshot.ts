@@ -2,6 +2,7 @@
 
 import {
   type WorldState,
+  type YearLog,
   isWild,
   groupIdOf,
   orientation,
@@ -56,7 +57,10 @@ export interface Snapshot {
   cellHue: Int16Array; // dominant owner hue, -1 if none
   foodDisplay: Float32Array;
   rawDisplay: Float32Array;
+  // Only the PLAYER market summary is shipped (markets[0]); with thousands of AI markets, shipping
+  // every summary each snapshot would be wasteful and the UI only reads the player's.
   markets: MarketSummary[];
+  log: YearLog[]; // full per-year player history (for the sidebar mini-charts)
 }
 
 export function wildHue(groupId: number): number {
@@ -105,7 +109,8 @@ export function buildSnapshot(s: WorldState): Snapshot {
   const max = maxTechLevel();
   let playerDead = 0;
   for (const l of s.log) playerDead += l.died;
-  const markets: MarketSummary[] = s.markets.map((m) => ({
+  // Ship only the player market summary (the UI reads markets[0] only).
+  const markets: MarketSummary[] = [s.markets[0]].map((m) => ({
     id: m.id,
     isPlayer: m.isPlayer,
     colorHue: m.colorHue,
@@ -152,5 +157,6 @@ export function buildSnapshot(s: WorldState): Snapshot {
     foodDisplay,
     rawDisplay,
     markets,
+    log: s.log,
   };
 }

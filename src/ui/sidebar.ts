@@ -3,8 +3,8 @@
 // Zoom lives on the map overlay (see main.ts), not here.
 
 import type { Snapshot } from '../render/snapshot';
-import type { ViewMode } from '../render/canvas';
 import { formatNumber } from '../render/format';
+import { mountCharts } from './charts';
 import { CONFIG } from '../config';
 
 export interface PolicyInput {
@@ -17,7 +17,6 @@ export interface PolicyInput {
 
 export interface SidebarCallbacks {
   onPolicyChange(p: PolicyInput): void;
-  onViewMode(m: ViewMode): void;
   onEndTurn(years: number): void;
   onYearsChange(years: number): void;
   onAutoPlayChange(enabled: boolean): void;
@@ -148,26 +147,7 @@ export function mountSidebar(
   root.className = 'sm-sidebar';
   root.innerHTML = '';
   root.appendChild(el('h1', undefined, 'SYNTHETIC MARKETS'));
-
-  // view mode
-  const viewSec = el('div', 'sm-sec');
-  viewSec.appendChild(el('div', 'sm-head', 'View'));
-  const viewBtns = el('div', 'sm-btns');
-  const modes: ViewMode[] = ['peoples', 'food', 'raw'];
-  const modeLabels = ['Peoples', 'Food', 'Raw'];
-  const modeButtons: HTMLButtonElement[] = [];
-  modes.forEach((m, i) => {
-    const b = el('button', 'sm-btn' + (i === 0 ? ' active' : ''), modeLabels[i]);
-    b.onclick = () => {
-      modeButtons.forEach((x) => x.classList.remove('active'));
-      b.classList.add('active');
-      cb.onViewMode(m);
-    };
-    modeButtons.push(b);
-    viewBtns.appendChild(b);
-  });
-  viewSec.appendChild(viewBtns);
-  root.appendChild(viewSec);
+  // (View-mode selector now lives as a top-center overlay on the map, not in the sidebar.)
 
   // ----- Policy section: Labor box, Raw allocation box, Forced intervention -----
   const polSec = el('div', 'sm-sec');
@@ -276,6 +256,12 @@ export function mountSidebar(
   statSec.appendChild(stats);
   root.appendChild(statSec);
 
+  // ----- live mini-charts (per-year player history) -----
+  const chartSec = el('div', 'sm-sec');
+  chartSec.appendChild(el('div', 'sm-head', 'History \u00b7 per year'));
+  const charts = mountCharts(chartSec);
+  root.appendChild(chartSec);
+
   // ----- game: force end / restart -----
   const gameSec = el('div', 'sm-sec');
   gameSec.appendChild(el('div', 'sm-head', 'Game'));
@@ -377,6 +363,8 @@ export function mountSidebar(
             `<div class="sm-row"><span>${label}</span><span>${fn(snap)}</span></div>`,
         )
         .join('');
+
+      charts.update(snap.log);
     },
     setAutoPlay(on: boolean) {
       autoOn = on;
