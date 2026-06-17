@@ -267,6 +267,14 @@ function reveal(s: WorldState, cell: number): void {
   }
 }
 
+// Reveal fog around all player-owned cells (8-neighborhood), so any market the player is
+// adjacent to becomes visible on the map with its live person count + color.
+export function revealPlayerVision(s: WorldState): void {
+  const player = s.markets[0];
+  if (!player) return;
+  for (const cell of player.cells) reveal(s, cell);
+}
+
 function claimCell(s: WorldState, cell: number, m: Market): void {
   s.marketId[cell] = m.id;
   m.cells.add(cell);

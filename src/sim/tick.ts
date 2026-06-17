@@ -2,7 +2,7 @@
 // tickBatch() loops up to N years, stopping early on a §6 end condition.
 
 import type { RNG } from '../world/rng';
-import { type Market, type WorldState, refreshDerived } from '../world/state';
+import { type Market, type WorldState, refreshDerived, revealPlayerVision } from '../world/state';
 import { RNG_SALT } from '../config';
 import {
   produce,
@@ -76,6 +76,9 @@ export function tick(state: WorldState, rng: RNG): void {
   // Step 9: movement (+ inline conflict, step 11).
   const intents = moveIntents(state, rngMove);
   for (const intent of intents) resolveMove(state, intent, rngConflict);
+
+  // Player vision: reveal neighbors of owned cells so adjacent markets become visible.
+  revealPlayerVision(state);
 
   // Step 10: propensity.
   updatePropensity(state, deficitCells);
