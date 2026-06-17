@@ -271,14 +271,32 @@ export function orientation(m: Market): number {
   return m.rawToMarketThisCycle / denom;
 }
 
-// Wealth Concentration (%): the food-land the densest WEALTH_TOP_FRACTION of the population needs,
-// expressed as a percentage of the market's total food capacity (foodPotentialThisCycle = Σ
-// foodYield*foodExt over owned cells). ~10% when the land comfortably feeds the population; rises
-// past 100% when the population is crammed far beyond what the land can support — the imbalance the
-// metric is meant to surface. 0 when there is no food capacity (no cells).
-export function wealthConcentration(m: Market): number {
-  if (m.foodPotentialThisCycle <= 0) return 0;
-  return ((CONFIG.WEALTH_TOP_FRACTION * m.population) / m.foodPotentialThisCycle) * 100;
+// Wealth Concentration (%): the food-land required to support the WEALTH_TOP_FRACTION (10%) of the
+// population residing on the market's HIGHEST raw-yielding cells, expressed as a percentage of the
+// market's total food capacity (foodPotentialThisCycle = Σ foodYield*foodExt over owned cells).
+//
+// People who pile onto prime raw cells (food-poor, raw-focused) must be fed from elsewhere; the
+// more of them and the denser their clusters, the larger the food hinterland they require. We rank
+// the market's POPULATED cells by raw yield and accumulate whole cells until they hold 10% of the
+// population, then express that population's food need (1 food/person) as a share of total food
+// capacity. ~10% when balanced; >100% means even that raw elite couldn't be fed by all the land.
+export function wealthConcentration(s: WorldState, m: Market): number {
+  if (m.foodPotentialThisCycle <= 0 || m.population <= 0) return 0;
+  // Gather the market's populated cells with their raw yield (skip empties — concentrated raw
+  // swarms, the case this measures, have few populated cells, so this stays cheap).
+  const cells: Array<{ pop: number; raw: number }> = [];
+  for (const c of m.cells) {
+    const pop = s.cellPopulation[c];
+    if (pop > 0) cells.push({ pop, raw: s.rawYield[c] + s.rawStock[c] });
+  }
+  cells.sort((a, b) => b.raw - a.raw); // highest raw-yielding cells first
+  const threshold = CONFIG.WEALTH_TOP_FRACTION * m.population; // 10% of the population
+  let popElite = 0;
+  for (const cell of cells) {
+    popElite += cell.pop;
+    if (popElite >= threshold) break;
+  }
+  return (popElite / m.foodPotentialThisCycle) * 100;
 }
 
 export function refreshDerived(s: WorldState): void {

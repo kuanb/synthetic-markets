@@ -160,7 +160,7 @@ export function buildSnapshot(s: WorldState): Snapshot {
     foodDeathsTotal: m.foodDeathsTotal,
     goodsDeathsTotal: m.goodsDeathsTotal,
     orientation: orientation(m),
-    wealthConcentration: wealthConcentration(m),
+    wealthConcentration: wealthConcentration(s, m),
     foodPotential: m.foodPotentialThisCycle,
     foodCaptured: m.foodThisYear,
     rawPotential: m.rawPotentialThisCycle,

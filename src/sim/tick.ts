@@ -176,7 +176,7 @@ export function tick(state: WorldState, rng: RNG): void {
     techInvested: player.techInvestedThisYear,
     capitalWealth: player.capitalWealth,
     population: player.population,
-    wealthConcentration: wealthConcentration(player),
+    wealthConcentration: wealthConcentration(state, player),
   });
 
   state.year++;
