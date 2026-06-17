@@ -74,7 +74,7 @@ describe('balance smoke', () => {
       laborToFoodFrac: 0.6,
       rawToMarketFrac: CONFIG.RAW_TO_MARKET_DEFAULT,
       rawToTechFrac: CONFIG.RAW_TO_TECH_DEFAULT,
-      rawUnminedFrac: CONFIG.RAW_UNMINED_DEFAULT,
+      rawToReserveFrac: CONFIG.RAW_RESERVE_DEFAULT,
       forcedIntervention: false,
     });
     // Aggressive research: grow via natural crowding-driven expansion (don't over-scatter with
@@ -84,7 +84,7 @@ describe('balance smoke', () => {
       laborToFoodFrac: 0.5,
       rawToMarketFrac: 0.0,
       rawToTechFrac: 0.95,
-      rawUnminedFrac: 0.05,
+      rawToReserveFrac: 0.05,
       forcedIntervention: false,
     });
 
@@ -123,7 +123,7 @@ describe('balance smoke', () => {
       laborToFoodFrac: CONFIG.LABOR_TO_FOOD_DEFAULT,
       rawToMarketFrac: CONFIG.RAW_TO_MARKET_DEFAULT,
       rawToTechFrac: CONFIG.RAW_TO_TECH_DEFAULT,
-      rawUnminedFrac: CONFIG.RAW_UNMINED_DEFAULT,
+      rawToReserveFrac: CONFIG.RAW_RESERVE_DEFAULT,
       forcedIntervention: false,
     };
     const s = createWorld(424242, 60, 60, { wildCellDensity: 0.05, aiMarkets: 4 });
