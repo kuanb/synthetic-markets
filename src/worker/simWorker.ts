@@ -67,7 +67,10 @@ self.onmessage = (e: MessageEvent<ToWorker>) => {
   try {
     switch (msg.type) {
       case 'INIT': {
-        world = createWorld(msg.seed, msg.width, msg.height);
+        world = createWorld(msg.seed, msg.width, msg.height, {
+          wildCellDensity: msg.wildCellDensity,
+          aiMarkets: msg.aiMarkets,
+        });
         rng = makeRng(msg.seed);
         over = false;
         post({ type: 'READY' });

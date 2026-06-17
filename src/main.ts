@@ -47,9 +47,17 @@ let years: number = CONFIG.DEFAULT_YEARS_PER_TURN;
 let autoTimer: ReturnType<typeof setTimeout> | undefined;
 const AUTO_DELAY_MS = 120;
 
-// Enforce the minimum map size floor (300) if a smaller size is ever configured.
-const MAP_W = Math.max(CONFIG.MAP_MIN_SIZE, CONFIG.WIDTH);
-const MAP_H = Math.max(CONFIG.MAP_MIN_SIZE, CONFIG.HEIGHT);
+// New-game settings (editable via the Settings modal). Initialized to the shipping defaults; only
+// applied when a NEW game starts. `size` is a square board (N×N); market density is "1 market per
+// N cells" (CELLS_PER_MARKET); population density is the wild-cell seed fraction.
+const settings: { size: number; cellsPerMarket: number; wildDensity: number } = {
+  size: Math.max(CONFIG.MAP_MIN_SIZE, CONFIG.WIDTH),
+  cellsPerMarket: CONFIG.CELLS_PER_MARKET,
+  wildDensity: CONFIG.WILD_CELL_DENSITY,
+};
+// Current world dimensions (updated on each new game); used as a pre-snapshot pan fallback.
+let MAP_W = settings.size;
+let MAP_H = settings.size;
 
 const worker = new Worker(new URL('./worker/simWorker.ts', import.meta.url), {
   type: 'module',
@@ -84,7 +92,26 @@ function scheduleAuto(): void {
   }, AUTO_DELAY_MS);
 }
 
-function restart(): void {
+// Send an INIT for a brand-new world using the current Settings.
+function sendInit(): void {
+  MAP_W = settings.size;
+  MAP_H = settings.size;
+  const aiMarkets = Math.max(
+    0,
+    Math.floor((MAP_W * MAP_H) / Math.max(1, settings.cellsPerMarket)) - 1,
+  );
+  const seed = Math.floor(Math.random() * 1_000_000_000);
+  send({
+    type: 'INIT',
+    seed,
+    width: MAP_W,
+    height: MAP_H,
+    wildCellDensity: settings.wildDensity,
+    aiMarkets,
+  });
+}
+
+function startNewGame(): void {
   clear();
   lastSaved = null;
   centered = false;
@@ -93,8 +120,7 @@ function restart(): void {
   lastEventCount = -1; // re-seed the Chronicle for the new world
   // drop any game-over summary overlay
   document.querySelectorAll('[data-sm-overlay]').forEach((n) => n.remove());
-  const seed = Math.floor(Math.random() * 1_000_000_000);
-  send({ type: 'INIT', seed, width: MAP_W, height: MAP_H });
+  sendInit();
 }
 
 // After an allocation change the worker logs a (coalesced) policy event but does not snapshot on
@@ -119,7 +145,7 @@ const sidebar = mountSidebar(sidebarRoot, {
     if (enabled) sendTick();
     else clearTimeout(autoTimer);
   },
-  onRestart: restart,
+  onRestart: startNewGame,
 });
 
 function findPlayerCell(s: Snapshot): number {
@@ -372,7 +398,7 @@ const EVENT_COLOR: Record<string, string> = {
 };
 const chronicleWrap = document.createElement('div');
 chronicleWrap.style.cssText =
-  'position:absolute;top:12px;right:12px;width:300px;max-height:50%;overflow-y:auto;' +
+  'position:absolute;top:54px;right:12px;width:300px;max-height:50%;overflow-y:auto;' +
   'background:rgba(8,8,8,0.85);border:1px solid #2a2a2a;border-radius:4px;padding:8px 10px;' +
   'opacity:0.95;z-index:15;';
 const chronicleHead = document.createElement('div');
@@ -383,6 +409,170 @@ chronicleWrap.appendChild(chronicleHead);
 const chronicleList = document.createElement('div');
 chronicleWrap.appendChild(chronicleList);
 stage.appendChild(chronicleWrap);
+
+// ---- Settings (gear, top-right corner) -> modal: world-gen params + About ----
+const ABOUT_PARAGRAPHS: string[] = [
+  'This game started as an experiment inspired by economic historian Karl Polanyi and a simple question:',
+  'Do markets emerge naturally, or are they built and maintained through rules, institutions, and intervention?',
+  'In the simulation, technology, production, and demand can reinforce one another, creating periods of rapid growth. As these feedback loops strengthen, the economy becomes larger, faster, and more difficult to control. Crises emerge. Interventions become necessary. New incentives produce unintended consequences.',
+  'The goal is not to model the real world accurately. Instead, it is to explore how complex economic systems can emerge from simple rules, and how growth, technology, markets, and political intervention shape one another over time.',
+  'Think of it less as a game and more as a toy model for asking: what actually drives markets?',
+];
+
+const gearBtn = document.createElement('button');
+gearBtn.textContent = '\u2699'; // gear
+gearBtn.title = 'Settings';
+gearBtn.style.cssText =
+  'position:absolute;top:12px;right:12px;width:34px;height:34px;z-index:16;cursor:pointer;' +
+  'background:rgba(8,8,8,0.85);color:#ccc;border:1px solid #2a2a2a;border-radius:4px;font-size:18px;line-height:1;';
+stage.appendChild(gearBtn);
+
+function openSettings(): void {
+  const overlay = document.createElement('div');
+  overlay.style.cssText =
+    'position:fixed;inset:0;z-index:1100;display:flex;align-items:flex-start;justify-content:center;' +
+    'overflow:auto;background:rgba(0,0,0,0.7);';
+  overlay.onclick = () => overlay.remove();
+  const card = document.createElement('div');
+  card.style.cssText =
+    'margin:5vh 20px;max-width:480px;width:100%;background:#0c0c0c;border:1px solid #2a2a2a;' +
+    'border-radius:8px;color:#dfe6ee;font:13px/1.5 ui-monospace,Menlo,monospace;' +
+    'box-shadow:0 6px 28px rgba(0,0,0,0.7);padding:20px 22px;';
+  card.onclick = (e) => e.stopPropagation();
+
+  const head = document.createElement('div');
+  head.style.cssText =
+    'display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;';
+  const h = document.createElement('div');
+  h.textContent = 'SETTINGS';
+  h.style.cssText = 'font-size:15px;font-weight:600;letter-spacing:.1em;';
+  const close = document.createElement('button');
+  close.textContent = '\u00d7';
+  close.style.cssText =
+    'background:none;border:none;color:#9aa;font-size:22px;cursor:pointer;line-height:1;';
+  close.onclick = () => overlay.remove();
+  head.appendChild(h);
+  head.appendChild(close);
+  card.appendChild(head);
+
+  const note = document.createElement('div');
+  note.style.cssText = 'color:#7d8590;font-size:11px;margin-bottom:14px;';
+  note.textContent = 'Changing any value starts a NEW game (current progress is lost).';
+  card.appendChild(note);
+
+  // hoisted helpers (referenced by the field oninput handlers created below)
+  function changed(): boolean {
+    return (
+      Number(sizeIn.value) !== settings.size ||
+      Number(cpmIn.value) !== settings.cellsPerMarket ||
+      Number(wildIn.value) !== settings.wildDensity
+    );
+  }
+  function updateNewGameBtn(): void {
+    newGameBtn.style.display = changed() ? 'block' : 'none';
+  }
+  function field(
+    label: string,
+    hint: string,
+    value: number,
+    min: number,
+    max: number,
+    step: number,
+  ): HTMLInputElement {
+    const row = document.createElement('div');
+    row.style.cssText = 'margin-bottom:12px;';
+    const lab = document.createElement('div');
+    lab.style.cssText = 'display:flex;justify-content:space-between;color:#aab;margin-bottom:3px;';
+    const ls = document.createElement('span');
+    ls.textContent = label;
+    const ds = document.createElement('span');
+    ds.textContent = `default ${value}`;
+    ds.style.cssText = 'color:#667;';
+    lab.appendChild(ls);
+    lab.appendChild(ds);
+    const input = document.createElement('input');
+    input.type = 'number';
+    input.min = String(min);
+    input.max = String(max);
+    input.step = String(step);
+    input.value = String(value);
+    input.style.cssText =
+      'width:100%;background:#060606;border:1px solid #2a2a2a;color:#fff;border-radius:3px;padding:6px 8px;font:inherit;';
+    input.oninput = updateNewGameBtn;
+    const hintEl = document.createElement('div');
+    hintEl.textContent = hint;
+    hintEl.style.cssText = 'color:#7d8590;font-size:11px;margin-top:3px;';
+    row.appendChild(lab);
+    row.appendChild(input);
+    row.appendChild(hintEl);
+    card.appendChild(row);
+    return input;
+  }
+
+  const sizeIn = field(
+    'Board size (N\u00d7N)',
+    'Larger boards hold more markets but make turns slower.',
+    settings.size,
+    60,
+    600,
+    10,
+  );
+  const cpmIn = field(
+    'Market density (1 market / N cells)',
+    'Lower = denser rivalry (more markets).',
+    settings.cellsPerMarket,
+    10,
+    5000,
+    10,
+  );
+  const wildIn = field(
+    'Population density (0\u20131)',
+    'Fraction of cells seeded with wild people.',
+    settings.wildDensity,
+    0,
+    1,
+    0.05,
+  );
+
+  const newGameBtn = document.createElement('button');
+  newGameBtn.textContent = 'START NEW GAME WITH THESE SETTINGS';
+  newGameBtn.style.cssText =
+    'width:100%;background:#1d3a4d;color:#fff;border:1px solid #2f6e92;padding:10px;font:inherit;' +
+    'font-weight:600;cursor:pointer;border-radius:3px;margin:4px 0 4px;display:none;';
+  newGameBtn.onclick = () => {
+    const clampI = (v: number, lo: number, hi: number) =>
+      Math.max(lo, Math.min(hi, Math.round(Number.isFinite(v) ? v : lo)));
+    settings.size = clampI(Number(sizeIn.value), 60, 600);
+    settings.cellsPerMarket = clampI(Number(cpmIn.value), 10, 5000);
+    settings.wildDensity = Math.max(0, Math.min(1, Number(wildIn.value) || 0));
+    overlay.remove();
+    startNewGame();
+  };
+  card.appendChild(newGameBtn);
+
+  // ---- About Game ----
+  const hr = document.createElement('div');
+  hr.style.cssText = 'border-top:1px solid #1c1c1c;margin:16px 0 12px;';
+  card.appendChild(hr);
+  const aboutH = document.createElement('div');
+  aboutH.textContent = 'ABOUT GAME';
+  aboutH.style.cssText = 'font-size:13px;font-weight:600;letter-spacing:.1em;margin-bottom:8px;';
+  card.appendChild(aboutH);
+  const aboutQ = document.createElement('div');
+  aboutQ.textContent = 'Why did I make this?';
+  aboutQ.style.cssText = 'color:#cdd6e0;font-weight:600;margin-bottom:8px;';
+  card.appendChild(aboutQ);
+  for (const para of ABOUT_PARAGRAPHS) {
+    const p = document.createElement('div');
+    p.textContent = para;
+    p.style.cssText = 'color:#aeb8c2;margin-bottom:10px;';
+    card.appendChild(p);
+  }
+
+  overlay.appendChild(card);
+  document.body.appendChild(overlay);
+}
+gearBtn.onclick = openSettings;
 
 function renderChronicle(events: Snapshot['events']): void {
   chronicleList.innerHTML = '';
@@ -520,8 +710,7 @@ if (saved) {
   lastSaved = saved;
   send({ type: 'LOAD', payload: saved });
 } else {
-  const seed = Math.floor(Math.random() * 1_000_000_000);
-  send({ type: 'INIT', seed, width: MAP_W, height: MAP_H });
+  sendInit();
 }
 
 resize();

@@ -4,7 +4,15 @@ import type { Policy, SerializedState } from '../world/state';
 import type { Snapshot } from '../render/snapshot';
 
 export type ToWorker =
-  | { type: 'INIT'; seed: number; width: number; height: number }
+  | {
+      type: 'INIT';
+      seed: number;
+      width: number;
+      height: number;
+      // optional world-gen overrides (Settings → New Game); omitted => config defaults
+      wildCellDensity?: number;
+      aiMarkets?: number;
+    }
   | { type: 'LOAD'; payload: SerializedState }
   | { type: 'SET_POLICY'; marketId: number; policy: Policy }
   | { type: 'TICK'; years: number }
