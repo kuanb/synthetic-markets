@@ -330,12 +330,34 @@ historyWrap.style.cssText =
   'position:absolute;top:12px;left:12px;width:300px;max-height:calc(100% - 160px);overflow-y:auto;' +
   'background:rgba(8,8,8,0.85);border:1px solid #2a2a2a;border-radius:4px;padding:8px 10px;' +
   'opacity:0.95;z-index:15;';
+// Clickable header (title + caret) to minimize/expand — lets it be hidden on smaller screens.
 const historyHead = document.createElement('div');
-historyHead.textContent = 'History \u00b7 per year';
 historyHead.style.cssText =
-  'color:#9aa;font-size:11px;letter-spacing:0.04em;text-transform:uppercase;margin-bottom:2px;';
+  'display:flex;justify-content:space-between;align-items:center;cursor:pointer;user-select:none;' +
+  'color:#9aa;font-size:11px;letter-spacing:0.04em;text-transform:uppercase;';
+const historyTitle = document.createElement('span');
+historyTitle.textContent = 'History \u00b7 per year';
+const historyCaret = document.createElement('span');
+historyCaret.style.cssText = 'color:#9aa;font-size:12px;';
+historyHead.appendChild(historyTitle);
+historyHead.appendChild(historyCaret);
 historyWrap.appendChild(historyHead);
-const charts = mountCharts(historyWrap);
+const historyBody = document.createElement('div');
+historyWrap.appendChild(historyBody);
+const charts = mountCharts(historyBody);
+// Start collapsed on smaller/mid screens (where the overlay competes for space); expanded on wide.
+let historyMinimized = window.innerWidth < 1500;
+const renderHistoryToggle = () => {
+  historyBody.style.display = historyMinimized ? 'none' : '';
+  historyCaret.textContent = historyMinimized ? '\u25b8' : '\u25be'; // collapsed / expanded
+  historyHead.style.marginBottom = historyMinimized ? '0' : '2px';
+};
+historyHead.onclick = () => {
+  historyMinimized = !historyMinimized;
+  renderHistoryToggle();
+  if (!historyMinimized && snap) charts.update(snap.log); // re-render at the correct width on expand
+};
+renderHistoryToggle();
 stage.appendChild(historyWrap);
 
 // ---- Chronicle: major historical events (TOP-RIGHT overlay), starting with the Epoch ----
@@ -503,3 +525,29 @@ if (saved) {
 }
 
 resize();
+
+// One-time "best on desktop" hint for awkward mid-width viewports (950 < width < 1500). A
+// dismissable modal shown only on page load; click anywhere to exit.
+function maybeShowDesktopHint(): void {
+  const w = window.innerWidth;
+  if (w <= 950 || w >= 1500) return;
+  const overlay = document.createElement('div');
+  overlay.style.cssText =
+    'position:fixed;inset:0;z-index:1000;display:flex;align-items:center;justify-content:center;' +
+    'background:rgba(0,0,0,0.7);cursor:pointer;';
+  const card = document.createElement('div');
+  card.style.cssText =
+    'max-width:420px;margin:20px;padding:22px 26px;background:#0c0c0c;border:1px solid #2f6e92;' +
+    'border-radius:8px;color:#dfe6ee;font:14px/1.55 ui-monospace,Menlo,monospace;text-align:center;' +
+    'box-shadow:0 6px 28px rgba(0,0,0,0.7);';
+  card.innerHTML =
+    '<div style="font-size:15px;font-weight:600;letter-spacing:.08em;margin-bottom:10px">BEST ON DESKTOP</div>' +
+    '<div style="color:#aeb8c2">Synthetic Markets is designed for a wide desktop screen. On a ' +
+    'narrower window some overlays compete for space \u2014 maximize the window or use a larger ' +
+    'display for the best experience.</div>' +
+    '<div style="margin-top:14px;color:#7d8590;font-size:12px">Click anywhere to dismiss</div>';
+  overlay.appendChild(card);
+  overlay.onclick = () => overlay.remove();
+  document.body.appendChild(overlay);
+}
+maybeShowDesktopHint();
