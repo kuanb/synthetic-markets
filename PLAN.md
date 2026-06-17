@@ -68,7 +68,7 @@ market/ownership/technology economy layered on top.
 | "product", "market total product output" | `goodsProducedThisCycle` |
 | "market value", "absolute goods wealth" | `capitalWealth` |
 | "raw to market" (mined raw → goods, tech excluded) | `rawToMarketThisCycle` (per-cycle accumulator) |
-| "raw left fallow / unmined this cycle" | `rawLeftUnminedThisCycle` (per-cycle accumulator) |
+| "raw retained / reserves this cycle" | `rawToReserveThisCycle` (per-cycle accumulator) → `rawReserves` pool |
 | "person", "agent", "people" (singular unit) | a discrete **Person** record (see §2.4) |
 | "tech", "technology level" | `techLevel` |
 | "wealth" (ambiguous) | **always** `capitalWealth` |
@@ -147,6 +147,9 @@ interface Market {
   techLevel: number;          // integer index into TECH_TABLE; 0 = start (ext = 1.0)
   techProgress: number;       // raw materials invested toward the NEXT tech (>= 0)
   capitalWealth: number;      // goods pool: produced goods accrue here, consumption drains here
+  rawReserves: number;        // persistent RAW pool (reserve allocation accrues here); funds the burst
+  pendingBurst: boolean;      // a queued Forced-Intervention burst awaiting sufficient reserves
+  pendingBurstCost: number;   // raw cost fixed at queue time (= BURST_RAW_COST_MULT * cycle rawMined)
   cells: Set<number>;         // owned cell indices (mirror of Land.marketId for O(1) iteration)
   colorHue: number;           // 0..360, random per market; tint derived from this
   desireToConsume: number;    // goods/person/cycle each member needs; grows (§5.3 step 8)
@@ -157,7 +160,7 @@ interface Market {
   goodsProducedThisCycle: number;     // = rawToMarketThisCycle * ext(techLevel)
   goodsConsumedThisCycle: number;     // goods drawn from capitalWealth to feed people (step 7)
   rawToMarketThisCycle: number;       // mined raw sent to market, tech EXCLUDED (orientation num.)
-  rawLeftUnminedThisCycle: number;    // available raw NOT mined this cycle (orientation denom. term)
+  rawToReserveThisCycle: number;      // mined raw retained in reserves this cycle (orientation denom. term)
   bornThisYear: number;
   diedThisYear: number;       // reset every simulated year (drives the per-year log)
   diedThisTurn: number;       // accumulated across all years of the most recent End Turn batch
@@ -167,11 +170,11 @@ interface Market {
 
 interface Policy {
   laborToFoodFrac: number;    // [0,1]; mining-labor frac = 1 - this
-  // Three-way disposition of MINABLE raw (rawYield + rawStock). These three MUST sum to 1:
+  // Three-way disposition of MINED raw. These three MUST sum to 1:
   rawToMarketFrac: number;    //  -> goods (capitalWealth), tech-scaled in step 5
   rawToTechFrac: number;      //  -> techProgress (research)
-  rawUnminedFrac: number;     //  -> left in the ground, banks in rawStock ("pay dirt")
-  forcedIntervention: boolean;// player-only: auto market-expansion each cycle while affordable
+  rawToReserveFrac: number;   //  -> accumulates into Market.rawReserves (funds the tech-burst)
+  forcedIntervention: boolean;// player-only: on a NEW tech, queue a territory-burst from reserves
 }
 ```
 > **[DEFAULT] Three-way raw allocation (v3).** Replaces the original two-way research-vs-market
@@ -191,15 +194,15 @@ interface Policy {
 - `population(marketId)` = count of live persons whose owner == marketId.
 - `extMultiplier(techLevel)` = `TECH_MULTIPLIER ^ techLevel` (§5.1).
 - `orientation(market)` — a **raw-units** ratio over the **last completed cycle**, measuring a
-  market's "growth mindset" (extract-and-accumulate) vs. leaving resources fallow in the ground:
+  market's "growth mindset" (push mined raw to MARKET) vs. holding back (retain in RESERVES):
   ```
-  orientation = rawToMarketThisCycle / (rawToMarketThisCycle + rawLeftUnminedThisCycle)
+  orientation = rawToMarketThisCycle / (rawToMarketThisCycle + rawToReserveThisCycle)
   // ∈ [0,1]; 0 if the denominator is 0. Raw spent on RESEARCH is EXCLUDED from both terms.
   ```
-  High orientation ⇒ the market mines hard and pushes raw to market (aggressive growth). Low
-  orientation ⇒ it leaves raw unmined in the ground (restraint). Goods and people do **not**
+  High orientation ⇒ the market pushes mined raw to market (aggressive growth). Low orientation
+  ⇒ it retains raw in reserves (holding back). Goods and people do **not**
   appear in this metric. Drives movement bias (§5.4) and conflict (§5.5).
-  `rawToMarketThisCycle` and `rawLeftUnminedThisCycle` are driven by the three-way raw policy
+  `rawToMarketThisCycle` and `rawToReserveThisCycle` are driven by the three-way raw policy
   (§2.5): the market share of mined raw vs. the deliberately/labour-limited unmined remainder.
 
 ---
@@ -276,7 +279,10 @@ export const CONFIG = {
   MAX_PERSONS: 80_000,               // global cap (discrete agents; every tick scans the pool O(N))
   // policy defaults — three-way raw allocation (sum to 1); low tech share so tech is deliberate
   LABOR_TO_FOOD_DEFAULT: 0.5,
-  RAW_TO_MARKET_DEFAULT: 0.6, RAW_TO_TECH_DEFAULT: 0.1, RAW_UNMINED_DEFAULT: 0.3,
+  RAW_TO_MARKET_DEFAULT: 0.6, RAW_TO_TECH_DEFAULT: 0.1, RAW_RESERVE_DEFAULT: 0.3,
+  // Forced Intervention — Market Expansion (tech-triggered territory burst from rawReserves)
+  BURST_RAW_COST_MULT: 5, BURST_MAX_RANGE: 250,
+  ARM_WIDTH_MIN: 5, ARM_WIDTH_MAX: 20, TERMINUS_RADIUS_MIN: 15, TERMINUS_RADIUS_MAX: 35,
   // tech (v3: EXPENSIVE so advancing is a real choice; co-tuned with TECH_MULTIPLIER)
   TECH_MULTIPLIER: 1.5,              // ext(level) = TECH_MULTIPLIER ^ level   (RAW->GOODS only)
   FOOD_TECH_MULTIPLIER: 1.0,         // foodExt(level) = ^level; 1.0 = food land-limited (NOT ext)
@@ -519,23 +525,23 @@ laborToRaw   = totalLabor - laborToFood                       // mining capacity
 
 food         = min(laborToFood, foodYield[cell]) * foodExt(techLevel)   // land-limited (NOT ext)
 
-minable        = rawYield[cell] + rawStock[cell]
-mineTargetFrac = policy.rawToMarketFrac + policy.rawToTechFrac           // = 1 - rawUnminedFrac
-desiredMined   = minable * mineTargetFrac                               // what we WANT to extract
-mined          = min(laborToRaw, desiredMined)                         // capped by mining labor
-unmined        = minable - mined ; rawStock[cell] = unmined            // banks ("pay dirt")
+minable      = rawYield[cell] + rawStock[cell]
+mined        = min(laborToRaw, minable)                              // capped by mining labor
+rawStock[cell] = minable - mined                                     // labour-limited remainder banks
 
-marketShare  = rawToMarketFrac / (rawToMarketFrac + rawToTechFrac)   // 0 if denom 0
-toMarket     = mined * marketShare                                  // -> rawToMarketThisCycle
-toTech       = mined - toMarket                                     // -> techProgress (research)
+toMarket     = mined * rawToMarketFrac     // -> rawToMarketThisCycle (goods)
+toTech       = mined * rawToTechFrac       // -> techProgress (research)
+toReserve    = mined * rawToReserveFrac    // -> rawReserves pool (+= rawToReserveThisCycle)
 ```
 Per-cycle accumulators: `rawToMarketThisCycle += toMarket`, `techProgress += toTech`,
-`rawLeftUnminedThisCycle += unmined`, `foodThisYear += food`. Food not produced is lost
-(perishable). Unmined raw banks in `rawStock` (invader "pay dirt").
+`rawReserves += toReserve`, `rawToReserveThisCycle += toReserve`, `rawMinedThisYear += mined`,
+`foodThisYear += food`. The three fractions sum to 1, so they partition **mined** raw. Food not
+produced is lost (perishable). A **labour-limited** remainder (when mining capacity < minable)
+banks in `rawStock` (invader "pay dirt").
 
 > **[DEFAULT] Where `ext`/`foodExt` apply:** `ext` scales **goods** from market-allocated raw
 > (step 5). **Food uses `foodExt`** (default unity) so it stays land-limited. Mined raw is
-> tracked in **raw units**; `orientation = toMarket / (toMarket + unmined)` stays a pure
+> tracked in **raw units**; `orientation = toMarket / (toMarket + toReserve)` stays a pure
 > raw-units ratio independent of tech level (research raw excluded).
 
 ### 5.3 The deterministic per-cycle (one year) resolution order  **[FROZEN]**
@@ -550,7 +556,7 @@ per-cycle accumulator to 0, and (for AI markets) run `runAiPolicy` (§5.6).
 For each year (repeat up to N times):
   0. PREP        refreshDerived; reset per-cycle accumulators
                  (goodsProducedThisCycle, goodsConsumedThisCycle, rawToMarketThisCycle,
-                  rawLeftUnminedThisCycle, bornThisYear, diedThisYear, foodThisYear) to 0;
+                  rawToReserveThisCycle, bornThisYear, diedThisYear, foodThisYear) to 0;
                  run AI policy (sim/ai.ts) for non-player markets.
   1. TECH UNLOCK if techProgress >= researchCost(techLevel+1) and techLevel < max:
                     techProgress -= researchCost(techLevel+1); techLevel++.  (<=1 unlock/yr)
@@ -559,9 +565,10 @@ For each year (repeat up to N times):
                     subject to MAX_PERSONS (skip births once the global cap is hit).
                     market.bornThisYear += 1 per birth.
   3+4. PRODUCTION + RAW DISPOSITION  apply §5.2 across all owned cells (merged in produce()):
-                    food uses foodExt (land-limited); the THREE-WAY raw policy partitions each
-                    cell's minable raw into market (-> rawToMarketThisCycle), tech (-> techProgress),
-                    and unmined (-> rawStock, += rawLeftUnminedThisCycle), capped by mining labor.
+                    food uses foodExt (land-limited); each cell mines min(miningLabor, minable);
+                    the THREE-WAY policy splits MINED raw into market (-> rawToMarketThisCycle),
+                    tech (-> techProgress), and reserves (-> rawReserves, += rawToReserveThisCycle).
+                    A labour-limited remainder banks in rawStock.
                     market.foodThisYear = Σ food.
                  (Raw's exactly three fates: market, tech, or unmined->rawStock.
                   TECH raw is EXCLUDED from orientation; persons NEVER hold raw.)
@@ -590,6 +597,11 @@ For each year (repeat up to N times):
                     ratchet off a hoarded pile and mass-starve the market.
   9. MOVEMENT    sim/agents.moveIntents -> per-person intents; resolve each via
                     sim/conflict.resolveMove (fog reveal + absorption + conflict, §5.4/§5.5).
+  9b. FORCED INTERVENTION (player only, §5.7): if the player unlocked a NEW tech this cycle and
+                    forcedIntervention is ON and no burst is pending, QUEUE one with cost =
+                    BURST_RAW_COST_MULT * rawMinedThisYear. If a burst is pending and
+                    rawReserves >= its stored cost, FIRE it (sim/burst.fireBurst): deduct reserves
+                    and annex an arm + terminus blob into the player. Else it stays banked.
  10. PROPENSITY  per person: if its current cell had a food deficit this year
                     (cell food < cell population for that market) -> propensity += PROPENSITY_RISE
                     else propensity -= PROPENSITY_DECAY; then relax any burst component by
@@ -665,16 +677,29 @@ year sets the AI's labor split + three-way raw split:
 Wild persons never form a market; they wander (§5.4 people-oriented) and are absorbed when a
 market expands onto them.
 
-### 5.7 Expansion via Burst Spend  **[DEFAULT]**
+### 5.7 Forced Intervention — Market Expansion (tech-triggered territory burst)  **[DEFAULT]**
 
-Player clicks in the sidebar **before End Turn**; AI triggers it in `runAiPolicy`.
-```
-cost   = ceil(|market.cells| / 2)   goods, drawn from capitalWealth   // progressive
-guard:   only if capitalWealth >= cost
-effect:  capitalWealth -= cost;
-         every person of the market: propensity = clamp(propensity + BURST_BUMP, 0, 1)  // +0.5
-```
-The bump decays per §5.3 step 10 → a migration pulse, not permanent.
+The player's `forcedIntervention` toggle no longer does the legacy goods/propensity burst. Instead
+it arms a dramatic, **tech-triggered** territory burst paid from the raw `rawReserves` pool
+(`sim/burst.ts`, deterministic via `RNG_SALT.BURST`):
+
+- **Trigger / queue.** Only when the toggle is ON **and** the player unlocks a NEW technology that
+  cycle: queue a burst with `cost = BURST_RAW_COST_MULT (5) * rawMinedThisYear` (the cycle's TOTAL
+  raw mined), **stored fixed** at queue time. Keep **at most one** pending burst.
+- **Pay / bank.** Each cycle, if a burst is pending and `rawReserves >= cost`: deduct and **fire**.
+  Otherwise it stays **banked** (pending) until reserves catch up. (If geometry finds no reachable
+  territory it stays pending; reserves are not spent.)
+- **Geometry (fired).** Player centroid; `R = sqrt(cells/π)`, `L = min(R, BURST_MAX_RANGE=250)`.
+  Terminus center = a random pick among the top-10 **highest-raw** non-player cells within `R+L` of
+  the centroid. An **arm** (Bresenham corridor, random width `[ARM_WIDTH_MIN..MAX]=[5,20]`) runs
+  from a random player **boundary** cell to the terminus, ending in an **irregular blob**
+  (angle-wobbled radius `[TERMINUS_RADIUS_MIN..MAX]=[15,35]`).
+- **Annex (unconditional, no conflict rolls).** All arm+terminus cells become the player's:
+  `marketId=0`, added to the player's `cells` (removed from any prior owner), banked `rawStock`
+  travels with the cell, ALL persons on them (wild + enemy) convert to the player, fog revealed.
+  Everything clamped to map bounds.
+
+(AI markets still use the legacy `burstSpend` propensity pulse for their own expansion, §5.6.)
 
 ---
 
@@ -708,10 +733,11 @@ to every batched year of the turn:
 1. **Labor** box — Food vs Mining, **neutral/equal-weight** two-slider group summing to 100%
    (`laborToFoodFrac`; mining = 1 − food). Neither side is visually privileged.
 2. **Raw allocation** box — **three** sliders summing to 100%: Market (→goods), Tech (→research),
-   Leave-unmined (→banks in `rawStock`). Dragging one rescales the others proportionally so the
+   **Retain in reserves** (→`rawReserves`). Dragging one rescales the others proportionally so the
    total stays 100%. Defaults `60 / 10 / 30`.
-3. **Forced Intervention — Market Expansion** checkbox — auto-applies the burst-spend effect
-   (§5.7) each cycle while affordable; greyed/disabled-looking when `capitalWealth < ceil(cells/2)`.
+3. **Forced Intervention — Market Expansion** checkbox — when ON, unlocking a NEW tech spends
+   `5×` the cycle's raw from reserves to burst-expand into fresh territory (§5.7); banks if reserves
+   are short. The sub-text shows pending-burst status with its raw cost vs current reserves.
 
 People consume goods automatically from `capitalWealth` (§5.3 step 7); there is no
 goods-to-people control. The player's "growth vs restraint" posture (which drives conflict) is
@@ -722,8 +748,9 @@ Plus **Years per turn** — exactly **three** options: **10 / 50 / 250** (defaul
 posts `{type:'TICK', years}` and redraws on `SNAPSHOT`. An **auto-play** toggle repeats turns.
 
 **Sidebar live stats:** Year, current tech name + research progress
-(`techProgress / researchCost(next)`), population, market size (cells), Capital Wealth, goods
-produced/cycle, goods consumed/capita, current `orientation`, plus a **supply/demand + deaths
+(`techProgress / researchCost(next)`), population, market size (cells), Capital Wealth,
+**Reserves** (`rawReserves` — the burst pool, renamed/repurposed from the old unmined metric),
+goods produced/cycle, goods consumed/capita, current `orientation`, plus a **supply/demand + deaths
 panel** (all per-turn totals across the most recent End Turn batch, so a 50-year turn sums 50
 years — chosen as the most legible aggregate):
 - **Food req / produced** — `foodNeededThisTurn` (= Σ population, 1 food/person/cycle) vs
@@ -886,7 +913,7 @@ Flagged smoke tests (report, do **not** fail CI):
 5. Persons never hold raw; raw's only fates are research, market, or banked `rawStock`.
 6. Food is perishable (never banked); raw banks in `rawStock`.
 7. Goods are never a player allocation; all produced goods enter `capitalWealth`; people consume automatically (step 7).
-8. `orientation` is the raw-units `rawToMarket / (rawToMarket + rawLeftUnmined)` ratio, research excluded, `0/0→0`.
+8. `orientation` is the raw-units `rawToMarket / (rawToMarket + rawToReserve)` ratio, research excluded, `0/0→0`.
 9. The player controls exactly one market; conquest converts enemy cells/persons into it, never grants a second.
 10. Conflict is strictly market-vs-market; wild persons are absorbed, never fought.
 11. All RNG flows through the worker-owned seeded `RNG`; no `Math.random` affecting state.
