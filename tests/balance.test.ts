@@ -9,8 +9,9 @@
 import { describe, it, expect } from 'vitest';
 import { CONFIG } from '../src/config';
 import { makeRng } from '../src/world/rng';
-import { createWorld, orientation, type Policy } from '../src/world/state';
-import { tick } from '../src/sim/tick';
+import { createWorld, orientation, aiMarketCount, type Policy } from '../src/world/state';
+import { tick, tickBatch } from '../src/sim/tick';
+import { buildSnapshot } from '../src/render/snapshot';
 import { maxTechLevel } from '../src/sim/tech';
 
 const SEED = 13579;
@@ -185,4 +186,86 @@ describe('balance smoke', () => {
     // Goods-death is the gentle/secondary cause: never the dominant killer under default play.
     expect(goodsDeathsAll).toBeLessThan(foodDeathsAll);
   });
+});
+
+describe('density + performance smoke', () => {
+  // Reports world-gen / per-turn / snapshot latency and the startup market count at the SHIPPING
+  // defaults on a full 300x300 map (CONFIG.WIDTH/HEIGHT). After dropping the per-tick full-pool
+  // population scan and the per-market full-pool burst scan, the hot path is ~linear in
+  // (markets + live persons), which is what makes this density viable. Timings are machine- and
+  // load-dependent, so they are REPORTED, not asserted; correctness (market count, person
+  // integrity) IS asserted, and a deliberately generous wall-clock tripwire guards against a
+  // catastrophic O(markets*pool) regression creeping back in.
+  it('300x300 default world: gen/turn/snapshot latency + startup market count (reported)', () => {
+    const W = CONFIG.WIDTH;
+    const H = CONFIG.HEIGHT;
+    const SEED = 12345;
+
+    const tGen = performance.now();
+    const s = createWorld(SEED, W, H); // DEFAULT gen: derived market count + config wild density
+    const genMs = performance.now() - tGen;
+
+    const startMarkets = s.markets.length;
+    const startLive = s.liveCount;
+    const expectedMarkets = 1 + aiMarketCount(W, H);
+
+    // Snapshot (built once per turn by the worker; never per simulated year).
+    const tSnap = performance.now();
+    buildSnapshot(s);
+    const snapMs = performance.now() - tSnap;
+
+    // Worst-case per-turn cost: a raw 250-year run that does NOT early-stop on a player loss, so
+    // the timing reflects a fully-populated batch rather than a short game. Use a throwaway world
+    // so the reported batched-turn latencies below start from gen.
+    const sw = createWorld(SEED, W, H);
+    const rw = makeRng(SEED);
+    const tRaw = performance.now();
+    for (let y = 0; y < 250; y++) tick(sw, rw);
+    const raw250Ms = performance.now() - tRaw;
+
+    // Realistic batched turns (with tickBatch's early game-over stop) on the primary world.
+    const rng = makeRng(SEED);
+    const turn = (years: number): number => {
+      const t = performance.now();
+      tickBatch(s, rng, years);
+      return performance.now() - t;
+    };
+    const t10 = turn(10);
+    const t50 = turn(50);
+    const t250 = turn(250);
+
+    // Person integrity after the run: per-cell counts still sum to the live pool count.
+    let liveByCell = 0;
+    for (let i = 0; i < s.cellPopulation.length; i++) liveByCell += s.cellPopulation[i];
+
+    /* eslint-disable no-console */
+    console.log('--- DENSITY + PERFORMANCE SMOKE (300x300 default) ---');
+    console.log(
+      `CELLS_PER_MARKET=${CONFIG.CELLS_PER_MARKET} WILD_CELL_DENSITY=${CONFIG.WILD_CELL_DENSITY} ` +
+        `MAX_PERSONS=${CONFIG.MAX_PERSONS}`,
+    );
+    console.log(
+      `startMarkets=${startMarkets} (expected ${expectedMarkets}) startLive=${startLive} ` +
+        `gen=${genMs.toFixed(0)}ms snapshot=${snapMs.toFixed(1)}ms`,
+    );
+    console.log(
+      `WORST raw 250y=${raw250Ms.toFixed(0)}ms (per-year ${(raw250Ms / 250).toFixed(2)}ms)`,
+    );
+    console.log(
+      `batched turns (early-stop): 10y=${t10.toFixed(0)}ms 50y=${t50.toFixed(0)}ms 250y=${t250.toFixed(0)}ms`,
+    );
+    console.log('-----------------------------------------------------');
+    /* eslint-enable no-console */
+
+    let liveByCellW = 0;
+    for (let i = 0; i < sw.cellPopulation.length; i++) liveByCellW += sw.cellPopulation[i];
+
+    // Correctness asserts (machine-independent):
+    expect(startMarkets).toBe(expectedMarkets); // density knob wired through to gen
+    expect(liveByCell).toBe(s.liveCount); // person-pool integrity on the batched-turn world
+    expect(liveByCellW).toBe(sw.liveCount); // ...and on the raw worst-case world
+    // Generous regression tripwire (NOT a tight perf assert): a reintroduced O(markets*pool) scan
+    // would blow this out by 10-100x. 30s leaves huge headroom for slow/loaded CI machines.
+    expect(raw250Ms).toBeLessThan(30_000);
+  }, 60_000);
 });
