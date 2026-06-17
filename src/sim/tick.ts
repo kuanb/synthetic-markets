@@ -2,7 +2,7 @@
 // tickBatch() loops up to N years, stopping early on a §6 end condition.
 
 import type { RNG } from '../world/rng';
-import { type Market, type WorldState, refreshDerived, revealPlayerVision } from '../world/state';
+import { type Market, type WorldState, revealPlayerVision } from '../world/state';
 import { RNG_SALT } from '../config';
 import {
   produce,
@@ -54,8 +54,10 @@ export function tick(state: WorldState, rng: RNG): void {
   const rngConflict = rng.fork(RNG_SALT.CONFLICT + y);
   const rngBurst = rng.fork(RNG_SALT.BURST + y);
 
-  // Step 0: prep
-  refreshDerived(state);
+  // Step 0: prep. Market populations are maintained EXACTLY and incrementally (births ++, deaths
+  // -=, setPersonOwner ±), so we no longer recompute them with a full O(capacity) pool scan every
+  // tick. createWorld/deserialize seed the caches via refreshDerived; the invariant tests guard
+  // against drift.
   for (const m of state.markets) {
     resetAccumulators(m);
     runAiPolicy(state, m, rngAi);

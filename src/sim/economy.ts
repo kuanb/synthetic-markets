@@ -141,13 +141,19 @@ export function goodsConsumptionAndDeaths(s: WorldState, m: Market, rng: RNG): v
 
 // §5.7 Burst Spend: progressive cost in goods from capitalWealth, bumps every member's
 // propensity to move. Returns true if it fired. Used by the player (worker) and the AI.
+// A market's persons always live on its owned cells, so we walk m.cells' intrusive lists
+// (O(market persons)) instead of scanning the whole pool — essential with thousands of markets,
+// each of which may burst-spend every tick. The set of bumped persons is identical to a full-pool
+// scan filtered by owner, and the bump is order-independent, so results are byte-identical.
 export function burstSpend(s: WorldState, m: Market): boolean {
   const cost = Math.ceil(m.cells.size / 2);
   if (m.capitalWealth < cost) return false;
   m.capitalWealth -= cost;
-  for (let p = 0; p < s.personCapacity; p++) {
-    if (s.personCell[p] !== -1 && s.personOwner[p] === m.id) {
-      s.personPropensity[p] = Math.min(1, s.personPropensity[p] + CONFIG.BURST_BUMP);
+  for (const cell of m.cells) {
+    for (let p = s.cellHead[cell]; p !== -1; p = s.personNext[p]) {
+      if (s.personOwner[p] === m.id) {
+        s.personPropensity[p] = Math.min(1, s.personPropensity[p] + CONFIG.BURST_BUMP);
+      }
     }
   }
   return true;
