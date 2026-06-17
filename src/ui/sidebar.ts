@@ -19,6 +19,8 @@ export interface SidebarCallbacks {
   onPolicyChange(p: PolicyInput): void;
   onViewMode(m: ViewMode): void;
   onEndTurn(years: number): void;
+  onYearsChange(years: number): void;
+  onAutoPlayChange(enabled: boolean): void;
   onRestart(): void;
 }
 
@@ -138,7 +140,7 @@ function makeAllocGroup(
 export function mountSidebar(
   root: HTMLElement,
   cb: SidebarCallbacks,
-): { update(snap: Snapshot): void } {
+): { update(snap: Snapshot): void; setAutoPlay(on: boolean): void } {
   const style = document.createElement('style');
   style.textContent = css;
   document.head.appendChild(style);
@@ -240,6 +242,7 @@ export function mountSidebar(
       years = opt;
       [...yearBtns.children].forEach((x) => (x as HTMLElement).classList.remove('active'));
       b.classList.add('active');
+      cb.onYearsChange(years);
     };
     yearBtns.appendChild(b);
   });
@@ -247,6 +250,23 @@ export function mountSidebar(
   const endBtn = el('button', 'sm-end', 'END TURN');
   endBtn.onclick = () => cb.onEndTurn(years);
   turnSec.appendChild(endBtn);
+
+  // auto-play toggle: keep ending turns automatically until off / game over
+  let autoOn = false;
+  const autoBtn = el('button', 'sm-btn');
+  autoBtn.style.width = '100%';
+  autoBtn.style.marginTop = '6px';
+  const renderAuto = () => {
+    autoBtn.classList.toggle('active', autoOn);
+    autoBtn.textContent = autoOn ? 'AUTO-PLAY: ON \u23f8' : 'AUTO-PLAY: OFF \u25b6';
+  };
+  renderAuto();
+  autoBtn.onclick = () => {
+    autoOn = !autoOn;
+    renderAuto();
+    cb.onAutoPlayChange(autoOn);
+  };
+  turnSec.appendChild(autoBtn);
   root.appendChild(turnSec);
 
   // ----- stats -----
@@ -357,6 +377,10 @@ export function mountSidebar(
             `<div class="sm-row"><span>${label}</span><span>${fn(snap)}</span></div>`,
         )
         .join('');
+    },
+    setAutoPlay(on: boolean) {
+      autoOn = on;
+      renderAuto();
     },
   };
 }

@@ -37,6 +37,14 @@ let snap: Snapshot | null = null;
 let lastSaved: SerializedState | null = null;
 let centered = false;
 
+// auto-play loop state
+let autoPlay = false;
+let gameOver = false;
+let pendingTick = false;
+let years: number = CONFIG.DEFAULT_YEARS_PER_TURN;
+let autoTimer: ReturnType<typeof setTimeout> | undefined;
+const AUTO_DELAY_MS = 120;
+
 const worker = new Worker(new URL('./worker/simWorker.ts', import.meta.url), {
   type: 'module',
 });
@@ -56,10 +64,26 @@ function redraw(): void {
   if (snap) draw(ctx, snap, viewport, mode);
 }
 
+function sendTick(): void {
+  if (pendingTick || gameOver) return;
+  pendingTick = true;
+  send({ type: 'TICK', years });
+}
+
+function scheduleAuto(): void {
+  if (!autoPlay || gameOver) return;
+  clearTimeout(autoTimer);
+  autoTimer = setTimeout(() => {
+    if (autoPlay && !gameOver) sendTick();
+  }, AUTO_DELAY_MS);
+}
+
 function restart(): void {
   clear();
   lastSaved = null;
   centered = false;
+  gameOver = false;
+  pendingTick = false;
   // drop any game-over summary overlay
   document.querySelectorAll('[data-sm-overlay]').forEach((n) => n.remove());
   const seed = Math.floor(Math.random() * 1_000_000_000);
@@ -72,7 +96,18 @@ const sidebar = mountSidebar(sidebarRoot, {
     mode = m;
     redraw();
   },
-  onEndTurn: (years) => send({ type: 'TICK', years }),
+  onEndTurn: (y) => {
+    years = y;
+    sendTick();
+  },
+  onYearsChange: (y) => {
+    years = y;
+  },
+  onAutoPlayChange: (enabled) => {
+    autoPlay = enabled;
+    if (enabled) sendTick();
+    else clearTimeout(autoTimer);
+  },
   onRestart: restart,
 });
 
@@ -88,6 +123,7 @@ worker.onmessage = (e: MessageEvent<FromWorker>) => {
       break;
     case 'SNAPSHOT':
     case 'GAME_OVER': {
+      pendingTick = false;
       snap = msg.snapshot;
       if (!centered && snap) {
         const cell = findPlayerCell(snap);
@@ -104,7 +140,13 @@ worker.onmessage = (e: MessageEvent<FromWorker>) => {
       sidebar.update(snap);
       redraw();
       if (msg.type === 'GAME_OVER') {
+        gameOver = true;
+        autoPlay = false;
+        clearTimeout(autoTimer);
+        sidebar.setAutoPlay(false);
         showSummary(app, msg.outcome, lastSaved?.log ?? []);
+      } else {
+        scheduleAuto();
       }
       break;
     }
