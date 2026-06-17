@@ -13,7 +13,7 @@ import {
 import { formatNumber } from './render/format';
 import { mountSidebar } from './ui/sidebar';
 import { showSummary } from './ui/stats';
-import { load, save, type SerializedState } from './persistence';
+import { load, save, clear, type SerializedState } from './persistence';
 import type { FromWorker, ToWorker } from './worker/protocol';
 import type { Snapshot } from './render/snapshot';
 
@@ -56,6 +56,16 @@ function redraw(): void {
   if (snap) draw(ctx, snap, viewport, mode);
 }
 
+function restart(): void {
+  clear();
+  lastSaved = null;
+  centered = false;
+  // drop any game-over summary overlay
+  document.querySelectorAll('[data-sm-overlay]').forEach((n) => n.remove());
+  const seed = Math.floor(Math.random() * 1_000_000_000);
+  send({ type: 'INIT', seed, width: CONFIG.WIDTH, height: CONFIG.HEIGHT });
+}
+
 const sidebar = mountSidebar(sidebarRoot, {
   onPolicyChange: (p) => send({ type: 'SET_POLICY', marketId: 0, policy: p }),
   onViewMode: (m) => {
@@ -63,6 +73,7 @@ const sidebar = mountSidebar(sidebarRoot, {
     redraw();
   },
   onEndTurn: (years) => send({ type: 'TICK', years }),
+  onRestart: restart,
 });
 
 function findPlayerCell(s: Snapshot): number {

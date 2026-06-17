@@ -48,6 +48,7 @@ export function showSummary(root: HTMLElement, outcome: 'win' | 'loss', log: Yea
   const finalYear = log.length ? log[log.length - 1].year : 0;
 
   const overlay = document.createElement('div');
+  overlay.setAttribute('data-sm-overlay', '');
   overlay.style.cssText = `position:fixed;inset:0;background:rgba(0,0,0,0.92);z-index:50;
     display:flex;align-items:center;justify-content:center;padding:20px;overflow:auto;`;
   const card = document.createElement('div');

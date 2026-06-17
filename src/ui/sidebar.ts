@@ -19,6 +19,7 @@ export interface SidebarCallbacks {
   onPolicyChange(p: PolicyInput): void;
   onViewMode(m: ViewMode): void;
   onEndTurn(years: number): void;
+  onRestart(): void;
 }
 
 const css = `
@@ -51,6 +52,9 @@ const css = `
 .sm-check.disabled { opacity: .45; }
 .sm-check .t { color: #cdd6e0; font-weight: 600; font-size: 12px; }
 .sm-check .sub { color: #7d8590; font-size: 11px; }
+.sm-danger { width: 100%; background: #3a1d1d; color: #fff; border: 1px solid #7a2f2f; padding: 10px;
+  font: inherit; cursor: pointer; border-radius: 3px; letter-spacing: .05em; }
+.sm-danger:hover { background: #4d2424; }
 `;
 
 function el<K extends keyof HTMLElementTagNameMap>(
@@ -251,6 +255,18 @@ export function mountSidebar(
   const stats = el('div');
   statSec.appendChild(stats);
   root.appendChild(statSec);
+
+  // ----- game: force end / restart -----
+  const gameSec = el('div', 'sm-sec');
+  gameSec.appendChild(el('div', 'sm-head', 'Game'));
+  const restartBtn = el('button', 'sm-danger', 'END GAME \u00b7 NEW WORLD');
+  restartBtn.onclick = () => {
+    if (confirm('End this game and start a new world? Current progress will be lost.')) {
+      cb.onRestart();
+    }
+  };
+  gameSec.appendChild(restartBtn);
+  root.appendChild(gameSec);
 
   const rowsSpec: Array<[string, (s: Snapshot) => string]> = [
     ['Year', (s) => String(s.year)],
