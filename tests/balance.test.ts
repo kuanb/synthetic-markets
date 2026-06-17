@@ -77,6 +77,7 @@ describe('balance smoke', () => {
       rawToTechFrac: CONFIG.RAW_TO_TECH_DEFAULT,
       rawToReserveFrac: CONFIG.RAW_RESERVE_DEFAULT,
       forcedIntervention: false,
+      famineTolerance: CONFIG.FAMINE_TOLERANCE_DEFAULT,
     });
     // Aggressive research: grow via natural crowding-driven expansion (don't over-scatter with
     // forced intervention), keep enough food labor to sustain population, and pour nearly all
@@ -87,6 +88,7 @@ describe('balance smoke', () => {
       rawToTechFrac: 0.95,
       rawToReserveFrac: 0.05,
       forcedIntervention: false,
+      famineTolerance: CONFIG.FAMINE_TOLERANCE_DEFAULT,
     });
 
     /* eslint-disable no-console */
@@ -126,6 +128,7 @@ describe('balance smoke', () => {
       rawToTechFrac: CONFIG.RAW_TO_TECH_DEFAULT,
       rawToReserveFrac: CONFIG.RAW_RESERVE_DEFAULT,
       forcedIntervention: false,
+      famineTolerance: CONFIG.FAMINE_TOLERANCE_DEFAULT,
     };
 
     // The yearly economy is deterministic but CHAOTIC: at a single seed a tiny change in the
@@ -268,4 +271,55 @@ describe('density + performance smoke', () => {
     // would blow this out by 10-100x. 30s leaves huge headroom for slow/loaded CI machines.
     expect(raw250Ms).toBeLessThan(30_000);
   }, 60_000);
+});
+
+describe('famine tolerance', () => {
+  // A market-oriented player (orientation 0.94) sends its people chasing raw, abandoning fertile
+  // cells; the pooled larder collapses and the market starves. Subsistence (famineTolerance=0)
+  // anchors people to the cells that feed them, so it should starve LESS than Prospecting
+  // (famineTolerance=1). The single-cycle economy is chaotic, so a single seed can flip; assert on
+  // the SUM across a seed panel (the robust, intent-preserving comparison).
+  it('Subsistence (t=0) causes fewer food deaths than Prospecting (t=1) when market-oriented', () => {
+    const SEEDS = [12345, 99, 8675309, 31337, 7, 2024, 777];
+    const YRS = 150;
+    const policyAt = (t: number): Policy => ({
+      laborToFoodFrac: 0.5,
+      rawToMarketFrac: 0.85, // orientation 0.85/0.9 = 0.94 -> people chase raw, not food
+      rawToTechFrac: 0.1,
+      rawToReserveFrac: 0.05,
+      forcedIntervention: false,
+      famineTolerance: t,
+    });
+    const foodDeaths = (seed: number, t: number): number => {
+      const s = createWorld(seed, 60, 60, { wildCellDensity: 0.05, aiMarkets: 4 });
+      s.markets[0].policy = policyAt(t);
+      const rng = makeRng(seed);
+      for (let y = 0; y < YRS; y++) {
+        tick(s, rng);
+        const p = s.markets[0];
+        if (p.population <= 0 || p.cells.size === 0) break;
+      }
+      return s.markets[0].foodDeathsTotal;
+    };
+
+    let sum0 = 0;
+    let sum1 = 0;
+    const rows: string[] = [];
+    for (const seed of SEEDS) {
+      const d0 = foodDeaths(seed, 0);
+      const d1 = foodDeaths(seed, 1);
+      sum0 += d0;
+      sum1 += d1;
+      rows.push(`seed=${seed} subsistence=${d0} prospecting=${d1}`);
+    }
+
+    /* eslint-disable no-console */
+    console.log('--- FAMINE TOLERANCE SMOKE (market-oriented player, 60x60, 150y) ---');
+    console.log(rows.join('\n'));
+    console.log(`SUM food deaths: subsistence(t=0)=${sum0}  prospecting(t=1)=${sum1}`);
+    console.log('-------------------------------------------------------------------');
+    /* eslint-enable no-console */
+
+    expect(sum0).toBeLessThan(sum1);
+  });
 });

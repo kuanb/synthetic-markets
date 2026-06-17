@@ -64,15 +64,43 @@ function metric(s: WorldState, cell: number, marketOriented: boolean): number {
   return s.foodYield[cell] - s.cellPopulation[cell];
 }
 
+// Food-surplus-aware migration damping (Part B). Per market this cycle, compute a movement-
+// propensity multiplier in [MIN_MOVE_SCALE, 1] from its food surplus ratio and Famine Tolerance:
+// as the surplus approaches the (tolerance-shifted) comfort anchor, scale movement down so people
+// stop abandoning the cells that feed them. Precomputed ONCE per tick (thousands of markets),
+// indexed by market id; wild persons are unaffected (scale 1).
+function computeMoveScales(s: WorldState): Float32Array {
+  const scales = new Float32Array(s.markets.length);
+  for (const m of s.markets) {
+    const surplus = (m.foodThisYear - m.population) / Math.max(1, m.population);
+    const anchor = CONFIG.FOOD_ANCHOR_MARGIN * (1 - m.policy.famineTolerance);
+    const low = anchor - CONFIG.FOOD_ANCHOR_BAND;
+    let scale: number;
+    if (surplus >= anchor) scale = 1;
+    else if (surplus <= low) scale = CONFIG.MIN_MOVE_SCALE;
+    else {
+      const frac = (surplus - low) / CONFIG.FOOD_ANCHOR_BAND; // (0,1)
+      scale = CONFIG.MIN_MOVE_SCALE + frac * (1 - CONFIG.MIN_MOVE_SCALE);
+    }
+    scales[m.id] = scale;
+  }
+  return scales;
+}
+
 // Step 9 (intent phase): produce a move intent per moving person.
 export function moveIntents(s: WorldState, rng: RNG): MoveIntent[] {
   const intents: MoveIntent[] = [];
+  const moveScale = computeMoveScales(s);
   for (let p = 0; p < s.personCapacity; p++) {
     const from = s.personCell[p];
     if (from === -1) continue;
-    if (rng.next() >= s.personPropensity[p]) continue;
 
     const owner = s.personOwner[p];
+    // Damp the move-propensity threshold by the owning market's food-surplus scale (wild = 1).
+    // Exactly ONE rng.next() per person is kept (determinism); only the threshold is scaled.
+    const ms = isWild(owner) ? 1 : moveScale[marketIdOf(owner)];
+    if (rng.next() >= s.personPropensity[p] * ms) continue;
+
     let marketOriented = false;
     if (!isWild(owner)) {
       marketOriented = orientation(s.markets[marketIdOf(owner)]) >= 0.5;

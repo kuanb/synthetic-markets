@@ -65,6 +65,17 @@ export const CONFIG = {
   RAW_TO_TECH_DEFAULT: 0.1,
   RAW_RESERVE_DEFAULT: 0.3,
 
+  // Famine Tolerance (player policy knob) + food-surplus-aware migration damping. When a market's
+  // food surplus ratio approaches the (tolerance-shifted) comfort anchor, propensity to MOVE is
+  // scaled down toward MIN_MOVE_SCALE so people stop abandoning the cells that feed them.
+  //   t=0 (Subsistence): anchor = FOOD_ANCHOR_MARGIN (anchor hard, feed the population first)
+  //   t=1 (Prospecting): anchor = 0 (chase raw right into starvation)
+  // Default 0.1: almost completely famine-resistant, but a little willing to risk it for raw.
+  FAMINE_TOLERANCE_DEFAULT: 0.1,
+  MIN_MOVE_SCALE: 0.1, // floor on the movement-propensity multiplier when food is tight
+  FOOD_ANCHOR_MARGIN: 0.25, // surplus ratio at/above which movement is unrestricted (at t=0)
+  FOOD_ANCHOR_BAND: 0.35, // width of the ramp from free -> fully anchored
+
   // Forced Intervention — Market Expansion (tech-triggered territory burst paid from rawReserves)
   BURST_RAW_COST_MULT: 5, // cost = this * the market's total raw mined in the unlock cycle
   BURST_MAX_RANGE: 250, // arm length cap (cells): L = min(R, BURST_MAX_RANGE)

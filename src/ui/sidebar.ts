@@ -12,6 +12,7 @@ export interface PolicyInput {
   rawToTechFrac: number;
   rawToReserveFrac: number;
   forcedIntervention: boolean;
+  famineTolerance: number;
 }
 
 export interface SidebarCallbacks {
@@ -157,6 +158,7 @@ export function mountSidebar(
   let rawTech: number = CONFIG.RAW_TO_TECH_DEFAULT;
   let rawReserve: number = CONFIG.RAW_RESERVE_DEFAULT;
   let forced = false;
+  let famine: number = CONFIG.FAMINE_TOLERANCE_DEFAULT;
 
   const emitPolicy = () =>
     cb.onPolicyChange({
@@ -165,6 +167,7 @@ export function mountSidebar(
       rawToTechFrac: rawTech,
       rawToReserveFrac: rawReserve,
       forcedIntervention: forced,
+      famineTolerance: famine,
     });
 
   // Labor: neutral, equal-weight (food vs mining), summing to 100%.
@@ -208,6 +211,35 @@ export function mountSidebar(
     emitPolicy();
   };
   polSec.appendChild(interv);
+
+  // Famine Tolerance: a single slider (not an alloc group). Subsistence (0) anchors people to
+  // fed cells; Prospecting (1) lets them chase raw into starvation.
+  const famineBox = el('div', 'sm-box');
+  famineBox.appendChild(el('div', 'sm-box-h', 'Famine Tolerance'));
+  const famineVal = el('div', 'sm-alloc-lbl');
+  famineBox.appendChild(famineVal);
+  const famineSlider = el('input', 'sm-slider');
+  famineSlider.type = 'range';
+  famineSlider.min = '0';
+  famineSlider.max = '100';
+  famineSlider.value = String(Math.round(famine * 100));
+  const renderFamine = () => {
+    famineVal.innerHTML = `<span>Risk famine for raw</span><span>${Math.round(famine * 100)}%</span>`;
+  };
+  famineSlider.oninput = () => {
+    famine = Number(famineSlider.value) / 100;
+    renderFamine();
+    emitPolicy();
+  };
+  famineBox.appendChild(famineSlider);
+  const famineCap = el('div');
+  famineCap.style.cssText =
+    'display:flex;justify-content:space-between;color:#7d8590;font-size:11px;margin-top:2px;';
+  famineCap.innerHTML = '<span>Subsistence</span><span>Prospecting</span>';
+  famineBox.appendChild(famineCap);
+  renderFamine();
+  polSec.appendChild(famineBox);
+
   root.appendChild(polSec);
 
   // ----- Turn: years (3 options) + End Turn -----
@@ -292,6 +324,31 @@ export function mountSidebar(
           : '0',
     ],
     ['Orientation', (s) => s.markets[0].orientation.toFixed(2)],
+    // yield efficiency: captured vs full land potential over owned cells (this cycle)
+    [
+      'Food yield (cap/util)',
+      (s) =>
+        `${formatNumber(s.markets[0].foodCaptured)} / ${formatNumber(s.markets[0].foodPotential)}`,
+    ],
+    [
+      'Food efficiency',
+      (s) =>
+        s.markets[0].foodPotential > 0
+          ? `${((s.markets[0].foodCaptured / s.markets[0].foodPotential) * 100).toFixed(0)}%`
+          : '0%',
+    ],
+    [
+      'Raw yield (cap/util)',
+      (s) =>
+        `${formatNumber(s.markets[0].rawCaptured)} / ${formatNumber(s.markets[0].rawPotential)}`,
+    ],
+    [
+      'Raw efficiency',
+      (s) =>
+        s.markets[0].rawPotential > 0
+          ? `${((s.markets[0].rawCaptured / s.markets[0].rawPotential) * 100).toFixed(0)}%`
+          : '0%',
+    ],
     // supply vs demand this turn (totals across the batched years)
     [
       'Food req / produced',
@@ -337,8 +394,11 @@ export function mountSidebar(
         rawTech = p.rawToTechFrac;
         rawReserve = p.rawToReserveFrac;
         forced = p.forcedIntervention;
+        famine = p.famineTolerance;
         laborGroup.set([laborFood, 1 - laborFood]);
         rawGroup.set([rawMarket, rawTech, rawReserve]);
+        famineSlider.value = String(Math.round(famine * 100));
+        renderFamine();
         syncedPolicy = true;
       }
       intervBox.checked = forced;

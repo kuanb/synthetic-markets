@@ -39,6 +39,11 @@ export interface MarketSummary {
   foodDeathsTotal: number;
   goodsDeathsTotal: number;
   orientation: number;
+  // yield efficiency (this cycle): captured vs full land potential over owned cells
+  foodPotential: number;
+  foodCaptured: number;
+  rawPotential: number;
+  rawCaptured: number;
   rawReserves: number; // persistent raw pool that funds the Forced-Intervention burst
   pendingBurst: boolean; // a queued burst awaiting sufficient reserves
   pendingBurstCost: number; // raw cost of the queued burst
@@ -48,6 +53,7 @@ export interface MarketSummary {
   rawToTechFrac: number;
   rawToReserveFrac: number;
   forcedIntervention: boolean;
+  famineTolerance: number;
 }
 
 export interface Snapshot {
@@ -142,6 +148,10 @@ export function buildSnapshot(s: WorldState): Snapshot {
     foodDeathsTotal: m.foodDeathsTotal,
     goodsDeathsTotal: m.goodsDeathsTotal,
     orientation: orientation(m),
+    foodPotential: m.foodPotentialThisCycle,
+    foodCaptured: m.foodThisYear,
+    rawPotential: m.rawPotentialThisCycle,
+    rawCaptured: m.rawMinedThisYear,
     rawReserves: m.rawReserves,
     pendingBurst: m.pendingBurst,
     pendingBurstCost: m.pendingBurstCost,
@@ -150,6 +160,7 @@ export function buildSnapshot(s: WorldState): Snapshot {
     rawToTechFrac: m.policy.rawToTechFrac,
     rawToReserveFrac: m.policy.rawToReserveFrac,
     forcedIntervention: m.policy.forcedIntervention,
+    famineTolerance: m.policy.famineTolerance,
   }));
 
   return {

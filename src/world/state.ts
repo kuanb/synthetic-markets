@@ -21,6 +21,9 @@ export interface Policy {
   // Player-only: when ON, unlocking a NEW technology queues a territory-burst paid from
   // rawReserves (see sim/burst.ts). Unused for AI markets.
   forcedIntervention: boolean;
+  // [0,1] migration-vs-famine tradeoff: 0 = Subsistence (anchor people to fed cells), 1 =
+  // Prospecting (let people chase raw into starvation). Damps movement as food surplus tightens.
+  famineTolerance: number;
 }
 
 export interface Market {
@@ -43,6 +46,9 @@ export interface Market {
   goodsConsumedThisCycle: number;
   rawToMarketThisCycle: number;
   rawToReserveThisCycle: number; // raw allocated to reserves this cycle (orientation denominator)
+  // yield-efficiency accumulators (transient per-cycle; full land capacity over ALL owned cells)
+  foodPotentialThisCycle: number; // Σ foodYield[cell] * foodExt(techLevel) over owned cells
+  rawPotentialThisCycle: number; // Σ (rawYield[cell] + rawStock[cell]) over owned cells (pre-mine)
   bornThisYear: number;
   diedThisYear: number; // reset every simulated year (drives the per-year log)
   diedThisTurn: number; // accumulated across all years of the most recent End Turn batch
@@ -291,6 +297,7 @@ function makeMarket(id: number, isPlayer: boolean, propensityToExpand: number): 
       rawToTechFrac: CONFIG.RAW_TO_TECH_DEFAULT,
       rawToReserveFrac: CONFIG.RAW_RESERVE_DEFAULT,
       forcedIntervention: false,
+      famineTolerance: CONFIG.FAMINE_TOLERANCE_DEFAULT,
     },
     propensityToExpand,
     isPlayer,
@@ -298,6 +305,8 @@ function makeMarket(id: number, isPlayer: boolean, propensityToExpand: number): 
     goodsConsumedThisCycle: 0,
     rawToMarketThisCycle: 0,
     rawToReserveThisCycle: 0,
+    foodPotentialThisCycle: 0,
+    rawPotentialThisCycle: 0,
     bornThisYear: 0,
     diedThisYear: 0,
     diedThisTurn: 0,
@@ -576,6 +585,10 @@ export function deserialize(p: SerializedState): WorldState {
       pendingBurstCost: m.pendingBurstCost ?? 0,
       pendingBurstTech: m.pendingBurstTech ?? 0,
       rawToReserveThisCycle: m.rawToReserveThisCycle ?? 0,
+      foodPotentialThisCycle: m.foodPotentialThisCycle ?? 0,
+      rawPotentialThisCycle: m.rawPotentialThisCycle ?? 0,
+      // back-compat for saves predating the famine-tolerance knob
+      policy: { ...m.policy, famineTolerance: m.policy.famineTolerance ?? CONFIG.FAMINE_TOLERANCE_DEFAULT },
       cells: new Set<number>(m.cells),
     })),
     nextWildGroupId: p.nextWildGroupId,

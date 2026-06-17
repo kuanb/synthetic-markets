@@ -124,6 +124,24 @@ describe('invariants over a run', () => {
     }
   });
 
+  it('yield efficiency: 0 <= captured <= potential, for food and raw, every market every tick', () => {
+    const s = createWorld(99, W, H, OPTS);
+    const rng = makeRng(99);
+    for (let i = 0; i < 60; i++) {
+      tick(s, rng);
+      for (const m of s.markets) {
+        // captured is harvested only on worked cells; potential sums full capacity over ALL owned
+        // cells, so captured can never exceed potential (tiny epsilon for float accumulation).
+        expect(m.foodThisYear).toBeGreaterThanOrEqual(0);
+        expect(m.foodPotentialThisCycle).toBeGreaterThanOrEqual(0);
+        expect(m.foodThisYear).toBeLessThanOrEqual(m.foodPotentialThisCycle + 1e-6);
+        expect(m.rawMinedThisYear).toBeGreaterThanOrEqual(0);
+        expect(m.rawPotentialThisCycle).toBeGreaterThanOrEqual(0);
+        expect(m.rawMinedThisYear).toBeLessThanOrEqual(m.rawPotentialThisCycle + 1e-6);
+      }
+    }
+  });
+
   it('death floor: population <= floor(food) after a starving cycle (past safe window)', () => {
     const s = createWorld(5, W, H, OPTS);
     // advance past the early-game player safety window so full mortality applies
@@ -187,5 +205,23 @@ describe('determinism + batch equivalence', () => {
     const once = serialize(s);
     const round = serialize(deserialize(once));
     expect(JSON.stringify(round)).toBe(JSON.stringify(once));
+  });
+
+  it('determinism holds with a fixed policy including famineTolerance', () => {
+    const policy = {
+      laborToFoodFrac: 0.5,
+      rawToMarketFrac: 0.7,
+      rawToTechFrac: 0.1,
+      rawToReserveFrac: 0.2,
+      forcedIntervention: true,
+      famineTolerance: 0.3,
+    };
+    const a = createWorld(4242, W, H, OPTS);
+    const b = createWorld(4242, W, H, OPTS);
+    a.markets[0].policy = { ...policy };
+    b.markets[0].policy = { ...policy };
+    tickBatch(a, makeRng(4242), 40);
+    tickBatch(b, makeRng(4242), 40);
+    expect(hash(a)).toBe(hash(b));
   });
 });

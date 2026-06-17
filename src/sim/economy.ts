@@ -60,6 +60,11 @@ export function produce(s: WorldState, m: Market, deficitCells: Set<number>): nu
   const mFrac = m.policy.rawToMarketFrac;
   const tFrac = m.policy.rawToTechFrac;
   for (const cell of m.cells) {
+    // Yield POTENTIAL is the full land capacity over ALL owned cells (even unworked ones), so the
+    // captured/potential efficiency visibly craters when people abandon fertile cells for raw.
+    // Computed before the labor skip and before rawStock is decremented below.
+    m.foodPotentialThisCycle += s.foodYield[cell] * fe;
+    m.rawPotentialThisCycle += s.rawYield[cell] + s.rawStock[cell];
     const labor = cellLabor(s, cell, m.id);
     if (labor <= 0) continue;
     const laborToFood = labor * m.policy.laborToFoodFrac;

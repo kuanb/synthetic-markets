@@ -34,6 +34,7 @@ interface PolicyShape {
   rawToTechFrac: number;
   rawToReserveFrac: number;
   forcedIntervention: boolean;
+  famineTolerance: number;
 }
 
 // Log a player allocation change as a historical event. Sliders fire on every drag step, so a
@@ -47,13 +48,14 @@ function logPolicyChange(s: WorldState, isPlayer: boolean, before: PolicyShape, 
     Math.abs(before.rawToMarketFrac - after.rawToMarketFrac) > eps ||
     Math.abs(before.rawToTechFrac - after.rawToTechFrac) > eps ||
     Math.abs(before.rawToReserveFrac - after.rawToReserveFrac) > eps ||
+    Math.abs(before.famineTolerance - after.famineTolerance) > eps ||
     before.forcedIntervention !== after.forcedIntervention;
   if (!changed) return;
   const pct = (x: number) => Math.round(x * 100);
   const text =
     `Allocations set \u2014 labor ${pct(after.laborToFoodFrac)}% food \u00b7 ` +
     `raw ${pct(after.rawToMarketFrac)}/${pct(after.rawToTechFrac)}/${pct(after.rawToReserveFrac)} ` +
-    `mkt/tech/res \u00b7 intervention ${after.forcedIntervention ? 'on' : 'off'}`;
+    `mkt/tech/res \u00b7 famine ${pct(after.famineTolerance)}% \u00b7 intervention ${after.forcedIntervention ? 'on' : 'off'}`;
   const last = s.events[s.events.length - 1];
   if (last && last.kind === 'policy' && last.year === s.year) {
     last.text = text; // coalesce a drag into one event for the year
@@ -102,6 +104,7 @@ self.onmessage = (e: MessageEvent<ToWorker>) => {
             m.policy.rawToReserveFrac = rv / sum;
           }
           m.policy.forcedIntervention = !!msg.policy.forcedIntervention;
+          m.policy.famineTolerance = clamp01(msg.policy.famineTolerance);
           logPolicyChange(world, m.isPlayer, before, m.policy);
         }
         break;

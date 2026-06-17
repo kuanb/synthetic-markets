@@ -26,6 +26,8 @@ function resetAccumulators(m: Market): void {
   m.goodsConsumedThisCycle = 0;
   m.rawToMarketThisCycle = 0;
   m.rawToReserveThisCycle = 0;
+  m.foodPotentialThisCycle = 0;
+  m.rawPotentialThisCycle = 0;
   m.bornThisYear = 0;
   m.diedThisYear = 0;
   m.foodThisYear = 0;
