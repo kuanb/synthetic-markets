@@ -11,17 +11,23 @@ export const CONFIG = {
   // Market density: ~1 market per CELLS_PER_MARKET cells. The AI market count is DERIVED from map
   // size: floor(width*height / CELLS_PER_MARKET) - 1 (the player is the one remaining market), so
   // there are many rivals out of the gate. (AI_MARKET_COUNT is a legacy fallback, unused at gen.)
-  // NOTE on defaults vs. the "literal" targets (1:25 markets, 50% density): the discrete-person
-  // model scans the live pool O(N) each tick and ~all agents migrate yearly, so the literal
-  // targets (~3600 markets + ~90k agents on 300x300) made a single 250-year batch take MINUTES.
-  // These constants ARE the tunable knobs; the defaults below are chosen to keep a 250-year turn
-  // responsive (~1-2s). Push them up for denser worlds at the cost of per-turn latency.
-  CELLS_PER_MARKET: 900, // -> ~100 AI markets on 300x300 (many rivals; see perf note)
+  // DENSITY vs. the "literal" targets (1:25 markets, ~50% density): after removing the per-tick
+  // full-pool population scan (refreshDerived) and the per-market full-pool burst scan, the hot
+  // path is ~linear in (markets + live persons), so density was pushed UP an order of magnitude
+  // toward the design intent: 1800 markets + ~70k live agents on 300x300, with a worst-case
+  // 250-year batch ~3-4s (the common 10/50-year turns are well under a second). The literal 1:25 /
+  // 50% target (~3600 markets) is reachable in ~4-5s but makes the opening unplayable — dense
+  // rivals reach and conquer the player's lone start cell before it can expand (the early safety
+  // net covers starvation, not territory loss), so ~40% of starts lose by year 5. CELLS_PER_MARKET
+  // and WILD_CELL_DENSITY are the knobs: raise toward 25 / 0.5 for max density at the cost of
+  // per-turn latency and opening difficulty.
+  CELLS_PER_MARKET: 50, // -> ~1800 AI markets on 300x300 (dense rivalry; see density note)
   AI_MARKET_COUNT: 4,
   AI_START_POP: 5,
   // World population density: ~WILD_CELL_DENSITY of cells are seeded with a small wild group at
-  // gen. Each seeded cell gets WILD_CELL_MIN..MAX persons.
-  WILD_CELL_DENSITY: 0.1,
+  // gen. Each seeded cell gets WILD_CELL_MIN..MAX persons (so ~half the map is occupied at gen
+  // once markets + wild groups are counted).
+  WILD_CELL_DENSITY: 0.35,
   WILD_CELL_MIN: 1,
   WILD_CELL_MAX: 3,
 
@@ -43,8 +49,10 @@ export const CONFIG = {
   MOBILITY: 1,
   BIRTH_RATE: 0.1,
   VIEW_RANGE: 1,
-  // Discrete-agent model: every tick scans the live pool O(N). Cap bounds per-turn latency.
-  MAX_PERSONS: 80_000,
+  // Discrete-agent model: several per-tick passes (births, movement, propensity) are O(live pool).
+  // Cap bounds per-turn latency + memory. ~70k live at gen on 300x300; headroom for growth before
+  // the cap binds (population trends DOWN over a long run as crowded markets shed/starve).
+  MAX_PERSONS: 250_000,
 
   // policy defaults (player starting slider positions)
   LABOR_TO_FOOD_DEFAULT: 0.95, // labor: food vs mining (raw = 1 - this)
