@@ -472,17 +472,20 @@ const EVENT_COLOR: Record<string, string> = {
   policy: '#9fb0c0',
   market: '#b0c4d4',
 };
+// Outer box does NOT scroll; the title stays fixed and only the event list scrolls beneath it.
 const chronicleWrap = document.createElement('div');
 chronicleWrap.style.cssText =
-  'position:absolute;top:12px;right:12px;width:300px;max-height:50%;overflow-y:auto;' +
-  'background:rgba(8,8,8,0.85);border:1px solid #2a2a2a;border-radius:4px;padding:8px 10px;' +
+  'position:absolute;top:12px;right:12px;width:300px;max-height:50%;display:flex;flex-direction:column;' +
+  'overflow:hidden;background:rgba(8,8,8,0.85);border:1px solid #2a2a2a;border-radius:4px;' +
   'opacity:0.95;z-index:15;';
 const chronicleHead = document.createElement('div');
 chronicleHead.textContent = 'Chronicle \u00b7 major events';
 chronicleHead.style.cssText =
-  'color:#9aa;font-size:11px;letter-spacing:0.04em;text-transform:uppercase;margin-bottom:6px;';
+  'flex:0 0 auto;color:#9aa;font-size:11px;letter-spacing:0.04em;text-transform:uppercase;' +
+  'padding:8px 10px 6px;border-bottom:1px solid #1c1c1c;';
 chronicleWrap.appendChild(chronicleHead);
 const chronicleList = document.createElement('div');
+chronicleList.style.cssText = 'flex:1 1 auto;min-height:0;overflow-y:auto;padding:6px 10px 8px;';
 chronicleWrap.appendChild(chronicleList);
 stage.appendChild(chronicleWrap);
 
@@ -658,7 +661,7 @@ function renderChronicle(events: Snapshot['events']): void {
     chronicleList.appendChild(row);
   }
   // keep the newest events in view
-  chronicleWrap.scrollTop = chronicleWrap.scrollHeight;
+  chronicleList.scrollTop = chronicleList.scrollHeight;
 }
 
 // Transient "alert card" for Forced-Intervention events: slides in at top-center, auto-dismisses.
