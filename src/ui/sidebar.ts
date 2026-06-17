@@ -11,7 +11,7 @@ export interface PolicyInput {
   laborToFoodFrac: number;
   rawToMarketFrac: number;
   rawToTechFrac: number;
-  rawUnminedFrac: number;
+  rawToReserveFrac: number;
   forcedIntervention: boolean;
 }
 
@@ -156,7 +156,7 @@ export function mountSidebar(
   let laborFood: number = CONFIG.LABOR_TO_FOOD_DEFAULT;
   let rawMarket: number = CONFIG.RAW_TO_MARKET_DEFAULT;
   let rawTech: number = CONFIG.RAW_TO_TECH_DEFAULT;
-  let rawUnmined: number = CONFIG.RAW_UNMINED_DEFAULT;
+  let rawReserve: number = CONFIG.RAW_RESERVE_DEFAULT;
   let forced = false;
 
   const emitPolicy = () =>
@@ -164,7 +164,7 @@ export function mountSidebar(
       laborToFoodFrac: laborFood,
       rawToMarketFrac: rawMarket,
       rawToTechFrac: rawTech,
-      rawUnminedFrac: rawUnmined,
+      rawToReserveFrac: rawReserve,
       forcedIntervention: forced,
     });
 
@@ -184,12 +184,12 @@ export function mountSidebar(
   const rawGroup = makeAllocGroup(
     polSec,
     'Raw allocation',
-    ['Market (goods)', 'Tech (research)', 'Leave unmined'],
-    [rawMarket, rawTech, rawUnmined],
+    ['Market (goods)', 'Tech (research)', 'Retain in reserves'],
+    [rawMarket, rawTech, rawReserve],
     (f) => {
       rawMarket = f[0];
       rawTech = f[1];
-      rawUnmined = f[2];
+      rawReserve = f[2];
       emitPolicy();
     },
   );
@@ -289,6 +289,7 @@ export function mountSidebar(
     ['Population', (s) => formatNumber(s.markets[0].population)],
     ['Market size', (s) => `${formatNumber(s.markets[0].cells)} cells`],
     ['Capital Wealth', (s) => formatNumber(s.markets[0].capitalWealth)],
+    ['Reserves', (s) => formatNumber(s.markets[0].rawReserves)],
     ['Goods / cycle', (s) => formatNumber(s.markets[0].goodsProduced)],
     [
       'Consumed / capita',
@@ -341,21 +342,25 @@ export function mountSidebar(
         laborFood = p.laborToFoodFrac;
         rawMarket = p.rawToMarketFrac;
         rawTech = p.rawToTechFrac;
-        rawUnmined = p.rawUnminedFrac;
+        rawReserve = p.rawToReserveFrac;
         forced = p.forcedIntervention;
         laborGroup.set([laborFood, 1 - laborFood]);
-        rawGroup.set([rawMarket, rawTech, rawUnmined]);
+        rawGroup.set([rawMarket, rawTech, rawReserve]);
         syncedPolicy = true;
       }
       intervBox.checked = forced;
 
-      const affordable = p.capitalWealth >= p.interventionCost;
-      interv.classList.toggle('disabled', !affordable);
-      intervSub.textContent = affordable
-        ? `auto each cycle \u00b7 cost ${formatNumber(p.interventionCost)} goods`
-        : `can't afford \u2014 needs ${formatNumber(p.interventionCost)} goods (have ${formatNumber(
-            p.capitalWealth,
-          )})`;
+      // Explain the tech-burst behavior + show pending status vs current reserves.
+      if (p.pendingBurst) {
+        const have = formatNumber(p.rawReserves);
+        const need = formatNumber(p.pendingBurstCost);
+        interv.classList.toggle('disabled', p.rawReserves < p.pendingBurstCost);
+        intervSub.textContent = `BURST PENDING — needs ${need} reserves (have ${have}); fires when funded`;
+      } else {
+        interv.classList.toggle('disabled', false);
+        intervSub.textContent =
+          'On a new tech, spend 5\u00d7 the cycle\u2019s raw from reserves to burst-expand into fresh territory (banks if reserves are short).';
+      }
 
       stats.innerHTML = rowsSpec
         .map(

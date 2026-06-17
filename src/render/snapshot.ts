@@ -38,13 +38,15 @@ export interface MarketSummary {
   foodDeathsTotal: number;
   goodsDeathsTotal: number;
   orientation: number;
+  rawReserves: number; // persistent raw pool that funds the Forced-Intervention burst
+  pendingBurst: boolean; // a queued burst awaiting sufficient reserves
+  pendingBurstCost: number; // raw cost of the queued burst
   // current policy (so the UI can reflect a loaded save)
   laborToFoodFrac: number;
   rawToMarketFrac: number;
   rawToTechFrac: number;
-  rawUnminedFrac: number;
+  rawToReserveFrac: number;
   forcedIntervention: boolean;
-  interventionCost: number; // ceil(cells/2); affordable when capitalWealth >= this
 }
 
 export interface Snapshot {
@@ -138,12 +140,14 @@ export function buildSnapshot(s: WorldState): Snapshot {
     foodDeathsTotal: m.foodDeathsTotal,
     goodsDeathsTotal: m.goodsDeathsTotal,
     orientation: orientation(m),
+    rawReserves: m.rawReserves,
+    pendingBurst: m.pendingBurst,
+    pendingBurstCost: m.pendingBurstCost,
     laborToFoodFrac: m.policy.laborToFoodFrac,
     rawToMarketFrac: m.policy.rawToMarketFrac,
     rawToTechFrac: m.policy.rawToTechFrac,
-    rawUnminedFrac: m.policy.rawUnminedFrac,
+    rawToReserveFrac: m.policy.rawToReserveFrac,
     forcedIntervention: m.policy.forcedIntervention,
-    interventionCost: Math.ceil(m.cells.size / 2),
   }));
 
   return {

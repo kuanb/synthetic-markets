@@ -55,12 +55,12 @@ self.onmessage = (e: MessageEvent<ToWorker>) => {
           // normalize the three-way raw split defensively (UI already keeps it summed to 1)
           const mk = Math.max(0, msg.policy.rawToMarketFrac);
           const tc = Math.max(0, msg.policy.rawToTechFrac);
-          const un = Math.max(0, msg.policy.rawUnminedFrac);
-          const sum = mk + tc + un;
+          const rv = Math.max(0, msg.policy.rawToReserveFrac);
+          const sum = mk + tc + rv;
           if (sum > 0) {
             m.policy.rawToMarketFrac = mk / sum;
             m.policy.rawToTechFrac = tc / sum;
-            m.policy.rawUnminedFrac = un / sum;
+            m.policy.rawToReserveFrac = rv / sum;
           }
           m.policy.forcedIntervention = !!msg.policy.forcedIntervention;
         }
