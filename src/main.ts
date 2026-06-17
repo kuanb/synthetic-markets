@@ -498,6 +498,34 @@ const ABOUT_PARAGRAPHS: string[] = [
   'Think of it less as a game and more as a toy model for asking: what actually drives markets?',
 ];
 
+// Download the current game's debug data (chronicle events + full per-year log + current player /
+// rival summaries) as a JSON file the user can hand back for diagnosis.
+function downloadDebugLog(): void {
+  if (!snap) return;
+  const data = {
+    meta: {
+      year: snap.year,
+      width: snap.width,
+      height: snap.height,
+      generatedAt: new Date().toISOString(),
+      settings,
+    },
+    player: snap.markets[0],
+    topMarkets: snap.topMarkets,
+    events: snap.events,
+    log: snap.log,
+  };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `synthetic-markets-debug-y${snap.year}.json`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
 function openSettings(): void {
   const overlay = document.createElement('div');
   overlay.style.cssText =
@@ -620,6 +648,20 @@ function openSettings(): void {
     startNewGame();
   };
   card.appendChild(newGameBtn);
+
+  // Debug-log export: hands the AI the events + per-year history to diagnose a run.
+  const dlBtn = document.createElement('button');
+  dlBtn.textContent = 'DOWNLOAD DEBUG LOG (JSON)';
+  dlBtn.style.cssText =
+    'width:100%;background:#111;color:#ccc;border:1px solid #2a2a2a;padding:9px;font:inherit;' +
+    'cursor:pointer;border-radius:3px;margin:0 0 4px;';
+  dlBtn.onclick = downloadDebugLog;
+  card.appendChild(dlBtn);
+  const dlHint = document.createElement('div');
+  dlHint.textContent =
+    'Exports the chronicle + full per-year history (population, food, goods, tech, deaths) as JSON.';
+  dlHint.style.cssText = 'color:#7d8590;font-size:11px;margin-bottom:4px;';
+  card.appendChild(dlHint);
 
   // ---- About Game ----
   const hr = document.createElement('div');

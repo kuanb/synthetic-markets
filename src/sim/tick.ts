@@ -81,11 +81,6 @@ export function tick(state: WorldState, rng: RNG): void {
 
   const deficitCells = new Set<number>();
 
-  // Snapshot for the historical-events feed: player population entering the year.
-  const playerPopStart = state.markets[0].population;
-  // The largest DISCOVERED + ALIVE rival markets entering the year (for death/±50%-swing events).
-  const watchedRivals = topDiscoveredRivals(state, CONFIG.OTHER_MARKETS_SHOWN);
-
   // Steps 1-8, fixed order.
   const playerLvlBefore = state.markets[0].techLevel;
   for (const m of state.markets) techUnlock(state, m); // 1
@@ -110,7 +105,6 @@ export function tick(state: WorldState, rng: RNG): void {
   // burst whose cost is fixed at BURST_RAW_COST_MULT * this cycle's total raw mined. Keep at most
   // one pending burst. Fire it (deduct reserves) as soon as reserves cover the stored cost.
   const player = state.markets[0];
-  let interventionFired = false;
   if (player.isPlayer) {
     if (playerUnlocked && player.policy.forcedIntervention && !player.pendingBurst) {
       player.pendingBurst = true;
@@ -122,7 +116,6 @@ export function tick(state: WorldState, rng: RNG): void {
         player.rawReserves -= player.pendingBurstCost;
         player.pendingBurst = false;
         player.pendingBurstCost = 0;
-        interventionFired = true;
         logEvent(
           state,
           'intervention',
@@ -161,44 +154,10 @@ export function tick(state: WorldState, rng: RNG): void {
   // Step 10: propensity.
   updatePropensity(state, deficitCells);
 
-  // Historical events: a large single-year swing in player population. A boom that merely reflects
-  // a Forced-Intervention annexation is suppressed (the intervention event already explains it).
-  const playerPopEnd = player.population;
-  if (playerPopStart >= CONFIG.EVENT_MIN_POP_FOR_DELTA) {
-    if (playerPopEnd <= playerPopStart * (1 - CONFIG.EVENT_DIEOFF_FRAC)) {
-      const lost = playerPopStart - playerPopEnd;
-      const pct = Math.round((lost / playerPopStart) * 100);
-      logEvent(state, 'dieoff', `Population crash \u2014 lost ${formatNumber(lost)} (\u2212${pct}%)`);
-    } else if (
-      !interventionFired &&
-      playerPopEnd >= playerPopStart * (1 + CONFIG.EVENT_BOOM_FRAC)
-    ) {
-      const gained = playerPopEnd - playerPopStart;
-      const pct = Math.round((gained / playerPopStart) * 100);
-      logEvent(state, 'boom', `Population boom \u2014 gained ${formatNumber(gained)} (+${pct}%)`);
-    }
-  }
-
-  // Historical events for the largest discovered rival markets: a top-5 market that collapses, or
-  // one that swings +/- EVENT_MARKET_SWING_FRAC in population in a single year.
-  for (const w of watchedRivals) {
-    const m = state.markets[w.id];
-    const endPop = m ? m.population : 0;
-    if (endPop <= 0) {
-      logEvent(state, 'market', `Rival Market #${w.id} collapsed (was ${formatNumber(w.pop)})`);
-    } else if (
-      w.pop >= CONFIG.EVENT_MIN_POP_FOR_DELTA &&
-      Math.abs(endPop - w.pop) / w.pop >= CONFIG.EVENT_MARKET_SWING_FRAC
-    ) {
-      const grew = endPop > w.pop;
-      const pct = Math.round((Math.abs(endPop - w.pop) / w.pop) * 100);
-      logEvent(
-        state,
-        'market',
-        `Rival Market #${w.id} ${grew ? 'surged' : 'contracted'} ${grew ? '+' : '\u2212'}${pct}% to ${formatNumber(endPop)}`,
-      );
-    }
-  }
+  // NOTE: magnitude-over-time events (player population crash/boom, rival-market collapse/swing) are
+  // detected PER TURN (the batch of years), not per year — see captureTurnStart/logTurnEvents below,
+  // invoked by the worker around tickBatch. A 99% collapse spread over a 250-year turn would only
+  // ever surface as many tiny per-year drops if computed here.
 
   // Step 12: log player aggregate.
   state.log.push({
@@ -248,4 +207,65 @@ export function tickBatch(state: WorldState, rng: RNG, years: number): EndState 
     if (end.over) return end;
   }
   return { over: false };
+}
+
+// ---- Per-TURN magnitude events (player crash/boom, rival collapse/swing) ----
+// These compare state across an entire End-Turn batch (10/50/250 years), not per year, so a large
+// collapse spread over many years surfaces as ONE event with the year span. Invoked by the worker
+// around tickBatch (NOT inside tick/tickBatch), so the per-year batch-equivalence invariant — which
+// compares a manual tick() loop to tickBatch() — is unaffected.
+export interface TurnStartState {
+  year: number;
+  playerPop: number;
+  rivals: Array<{ id: number; pop: number }>;
+}
+
+export function captureTurnStart(s: WorldState): TurnStartState {
+  return {
+    year: s.year,
+    playerPop: s.markets[0].population,
+    rivals: topDiscoveredRivals(s, CONFIG.OTHER_MARKETS_SHOWN),
+  };
+}
+
+export function logTurnEvents(s: WorldState, start: TurnStartState): void {
+  const endYear = s.year - 1; // last year resolved this turn
+  if (endYear < start.year) return; // no years actually resolved
+  const span = `y${start.year}\u2013y${endYear}`;
+
+  // Player population swing across the whole turn.
+  const before = start.playerPop;
+  const after = s.markets[0].population;
+  if (before >= CONFIG.EVENT_MIN_POP_FOR_DELTA) {
+    if (after <= before * (1 - CONFIG.EVENT_DIEOFF_FRAC)) {
+      const lost = before - after;
+      const pct = Math.round((lost / before) * 100);
+      logEvent(s, 'dieoff', `Population crash (${span}) \u2014 lost ${formatNumber(lost)} (\u2212${pct}%)`, endYear);
+    } else if (after >= before * (1 + CONFIG.EVENT_BOOM_FRAC)) {
+      const gained = after - before;
+      const pct = Math.round((gained / before) * 100);
+      logEvent(s, 'boom', `Population boom (${span}) \u2014 gained ${formatNumber(gained)} (+${pct}%)`, endYear);
+    }
+  }
+
+  // The largest discovered rival markets: collapse, or a >= EVENT_MARKET_SWING_FRAC swing over the turn.
+  for (const w of start.rivals) {
+    const m = s.markets[w.id];
+    const endPop = m ? m.population : 0;
+    if (endPop <= 0) {
+      logEvent(s, 'market', `Rival Market #${w.id} collapsed (${span}, was ${formatNumber(w.pop)})`, endYear);
+    } else if (
+      w.pop >= CONFIG.EVENT_MIN_POP_FOR_DELTA &&
+      Math.abs(endPop - w.pop) / w.pop >= CONFIG.EVENT_MARKET_SWING_FRAC
+    ) {
+      const grew = endPop > w.pop;
+      const pct = Math.round((Math.abs(endPop - w.pop) / w.pop) * 100);
+      logEvent(
+        s,
+        'market',
+        `Rival Market #${w.id} ${grew ? 'surged' : 'contracted'} ${grew ? '+' : '\u2212'}${pct}% (${span}, to ${formatNumber(endPop)})`,
+        endYear,
+      );
+    }
+  }
 }

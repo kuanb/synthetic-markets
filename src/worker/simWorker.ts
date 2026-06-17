@@ -8,7 +8,7 @@ import {
   type WorldState,
 } from '../world/state';
 import { makeRng, type RNG } from '../world/rng';
-import { tickBatch } from '../sim/tick';
+import { tickBatch, captureTurnStart, logTurnEvents } from '../sim/tick';
 import { buildSnapshot } from '../render/snapshot';
 import type { FromWorker, ToWorker } from './protocol';
 
@@ -111,7 +111,11 @@ self.onmessage = (e: MessageEvent<ToWorker>) => {
       }
       case 'TICK': {
         if (!world || !rng || over) break;
+        // Per-turn magnitude events (player crash/boom, rival collapse/swing) are computed across
+        // the whole batch here so a multi-year collapse logs once with its year span.
+        const turnStart = captureTurnStart(world);
         const end = tickBatch(world, rng, msg.years);
+        logTurnEvents(world, turnStart);
         post({ type: 'SAVED', payload: serialize(world) });
         if (end.over) {
           over = true;

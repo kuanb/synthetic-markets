@@ -380,9 +380,10 @@ export function revealPlayerVision(s: WorldState): void {
 }
 
 // Append a major historical event (player-facing). Bounded so a very long game can't grow it
-// without limit; the oldest events drop first.
-export function logEvent(s: WorldState, kind: EventKind, text: string): void {
-  s.events.push({ year: s.year, kind, text });
+// without limit; the oldest events drop first. `year` defaults to the current sim year but may be
+// set explicitly (e.g. per-turn events tagged with the year the turn concluded).
+export function logEvent(s: WorldState, kind: EventKind, text: string, year: number = s.year): void {
+  s.events.push({ year, kind, text });
   if (s.events.length > CONFIG.EVENT_LOG_MAX) s.events.shift();
 }
 
