@@ -8,6 +8,7 @@ function lineChart(
   log: YearLog[],
   pick: (l: YearLog) => number,
   color: string,
+  tip: HTMLElement,
 ): HTMLCanvasElement {
   const c = document.createElement('canvas');
   c.width = 420;
@@ -16,26 +17,74 @@ function lineChart(
   c.style.maxWidth = '420px';
   c.style.display = 'block';
   c.style.margin = '6px 0';
+  c.style.cursor = 'crosshair';
   const ctx = c.getContext('2d')!;
-  ctx.fillStyle = '#0a0a0a';
-  ctx.fillRect(0, 0, c.width, c.height);
   const vals = log.map(pick);
   const max = Math.max(1, ...vals);
   const n = vals.length;
-  ctx.strokeStyle = color;
-  ctx.lineWidth = 1.5;
-  ctx.beginPath();
-  vals.forEach((v, i) => {
-    const x = n > 1 ? (i / (n - 1)) * (c.width - 8) + 4 : 4;
-    const y = c.height - 16 - (v / max) * (c.height - 24);
-    if (i === 0) ctx.moveTo(x, y);
-    else ctx.lineTo(x, y);
+
+  const xOf = (i: number) => (n > 1 ? (i / (n - 1)) * (c.width - 8) + 4 : 4);
+  const yOf = (v: number) => c.height - 16 - (v / max) * (c.height - 24);
+
+  function draw(hoverIdx?: number): void {
+    ctx.fillStyle = '#0a0a0a';
+    ctx.fillRect(0, 0, c.width, c.height);
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    vals.forEach((v, i) => {
+      const x = xOf(i);
+      const y = yOf(v);
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+    if (hoverIdx !== undefined && hoverIdx >= 0 && hoverIdx < n) {
+      const x = xOf(hoverIdx);
+      const y = yOf(vals[hoverIdx]);
+      ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(x + 0.5, 14);
+      ctx.lineTo(x + 0.5, c.height);
+      ctx.stroke();
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.arc(x, y, 2.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.fillStyle = '#888';
+    ctx.font = '11px ui-monospace, monospace';
+    ctx.textAlign = 'left';
+    ctx.fillText(`${title} (peak ${formatNumber(max)})`, 6, 12);
+  }
+
+  draw();
+
+  c.addEventListener('mousemove', (ev) => {
+    if (n === 0) return;
+    const rect = c.getBoundingClientRect();
+    // map screen x -> canvas-internal x (the canvas is CSS-scaled to the container width)
+    const cx = ((ev.clientX - rect.left) * c.width) / Math.max(1, rect.width);
+    const i = n > 1 ? Math.round(((cx - 4) / (c.width - 8)) * (n - 1)) : 0;
+    const idx = Math.max(0, Math.min(n - 1, i));
+    draw(idx);
+    tip.innerHTML = `${title}<br/>yr <b>${log[idx].year}</b> \u00b7 <b>${formatNumber(vals[idx])}</b>`;
+    tip.style.display = 'block';
+    const tw = tip.offsetWidth;
+    const th = tip.offsetHeight;
+    let left = ev.clientX + 12;
+    let top = ev.clientY + 12;
+    if (left + tw > window.innerWidth) left = ev.clientX - tw - 12;
+    if (top + th > window.innerHeight) top = ev.clientY - th - 12;
+    tip.style.left = `${Math.max(0, left)}px`;
+    tip.style.top = `${Math.max(0, top)}px`;
   });
-  ctx.stroke();
-  ctx.fillStyle = '#888';
-  ctx.font = '11px ui-monospace, monospace';
-  ctx.textAlign = 'left';
-  ctx.fillText(`${title} (peak ${formatNumber(max)})`, 6, 12);
+  c.addEventListener('mouseleave', () => {
+    tip.style.display = 'none';
+    draw();
+  });
+
   return c;
 }
 
@@ -82,10 +131,19 @@ export function showSummary(root: HTMLElement, outcome: 'win' | 'loss', log: Yea
       )}</b></div>
     </div>
   `;
-  card.appendChild(lineChart('Population', log, (l) => l.population, '#6fd9d9'));
-  card.appendChild(lineChart('Born / yr', log, (l) => l.born, '#6fd98a'));
-  card.appendChild(lineChart('Died / yr', log, (l) => l.died, '#d96f6f'));
-  card.appendChild(lineChart('Capital Wealth', log, (l) => l.capitalWealth, '#d9c46f'));
+  // Shared hover tooltip for the mini-charts (fixed-position so it isn't clipped by the card).
+  const tip = document.createElement('div');
+  tip.setAttribute('data-sm-overlay', '');
+  tip.style.cssText = `position:fixed;pointer-events:none;z-index:60;display:none;
+    background:rgba(8,8,8,0.96);border:1px solid #333;border-radius:4px;padding:4px 7px;
+    font:11px ui-monospace,Menlo,monospace;color:#ddd;line-height:1.45;white-space:nowrap;
+    box-shadow:0 2px 10px rgba(0,0,0,0.6);`;
+  document.body.appendChild(tip);
+
+  card.appendChild(lineChart('Population', log, (l) => l.population, '#6fd9d9', tip));
+  card.appendChild(lineChart('Born / yr', log, (l) => l.born, '#6fd98a', tip));
+  card.appendChild(lineChart('Died / yr', log, (l) => l.died, '#d96f6f', tip));
+  card.appendChild(lineChart('Capital Wealth', log, (l) => l.capitalWealth, '#d9c46f', tip));
 
   const again = document.createElement('button');
   again.textContent = 'New World';
