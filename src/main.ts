@@ -785,11 +785,12 @@ if (saved) {
 
 resize();
 
-// One-time "best on desktop" hint for awkward mid-width viewports (950 < width < 1500). A
-// dismissable modal shown only on page load; click anywhere to exit.
+// One-time "best on desktop" hint for any viewport narrower than 1500px (covers small desktop
+// windows AND mobile, which the layout doesn't suit). A dismissable modal shown only on page load;
+// click anywhere to exit.
 function maybeShowDesktopHint(): void {
   const w = window.innerWidth;
-  if (w <= 950 || w >= 1500) return;
+  if (w >= 1500) return;
   const overlay = document.createElement('div');
   overlay.style.cssText =
     'position:fixed;inset:0;z-index:1000;display:flex;align-items:center;justify-content:center;' +
@@ -802,8 +803,8 @@ function maybeShowDesktopHint(): void {
   card.innerHTML =
     '<div style="font-size:15px;font-weight:600;letter-spacing:.08em;margin-bottom:10px">BEST ON DESKTOP</div>' +
     '<div style="color:#aeb8c2">Synthetic Markets is designed for a wide desktop screen. On a ' +
-    'narrower window some overlays compete for space \u2014 maximize the window or use a larger ' +
-    'display for the best experience.</div>' +
+    'narrower viewport (including mobile) the overlays compete for space \u2014 use a desktop and ' +
+    'widen the window for the best experience.</div>' +
     '<div style="margin-top:14px;color:#7d8590;font-size:12px">Click anywhere to dismiss</div>';
   overlay.appendChild(card);
   overlay.onclick = () => overlay.remove();
