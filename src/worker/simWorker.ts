@@ -4,6 +4,7 @@ import {
   createWorld,
   deserialize,
   serialize,
+  logEvent,
   type WorldState,
 } from '../world/state';
 import { makeRng, type RNG } from '../world/rng';
@@ -25,6 +26,40 @@ function snapshot(): void {
 
 function clamp01(x: number): number {
   return Math.max(0, Math.min(1, x));
+}
+
+interface PolicyShape {
+  laborToFoodFrac: number;
+  rawToMarketFrac: number;
+  rawToTechFrac: number;
+  rawToReserveFrac: number;
+  forcedIntervention: boolean;
+}
+
+// Log a player allocation change as a historical event. Sliders fire on every drag step, so a
+// run of changes within the SAME year is COALESCED into a single event (the last policy event of
+// the current year is rewritten rather than appended).
+function logPolicyChange(s: WorldState, isPlayer: boolean, before: PolicyShape, after: PolicyShape): void {
+  if (!isPlayer) return;
+  const eps = 0.005;
+  const changed =
+    Math.abs(before.laborToFoodFrac - after.laborToFoodFrac) > eps ||
+    Math.abs(before.rawToMarketFrac - after.rawToMarketFrac) > eps ||
+    Math.abs(before.rawToTechFrac - after.rawToTechFrac) > eps ||
+    Math.abs(before.rawToReserveFrac - after.rawToReserveFrac) > eps ||
+    before.forcedIntervention !== after.forcedIntervention;
+  if (!changed) return;
+  const pct = (x: number) => Math.round(x * 100);
+  const text =
+    `Allocations set \u2014 labor ${pct(after.laborToFoodFrac)}% food \u00b7 ` +
+    `raw ${pct(after.rawToMarketFrac)}/${pct(after.rawToTechFrac)}/${pct(after.rawToReserveFrac)} ` +
+    `mkt/tech/res \u00b7 intervention ${after.forcedIntervention ? 'on' : 'off'}`;
+  const last = s.events[s.events.length - 1];
+  if (last && last.kind === 'policy' && last.year === s.year) {
+    last.text = text; // coalesce a drag into one event for the year
+  } else {
+    logEvent(s, 'policy', text);
+  }
 }
 
 self.onmessage = (e: MessageEvent<ToWorker>) => {
@@ -51,6 +86,7 @@ self.onmessage = (e: MessageEvent<ToWorker>) => {
         if (!world) break;
         const m = world.markets[msg.marketId];
         if (m) {
+          const before = { ...m.policy };
           m.policy.laborToFoodFrac = clamp01(msg.policy.laborToFoodFrac);
           // normalize the three-way raw split defensively (UI already keeps it summed to 1)
           const mk = Math.max(0, msg.policy.rawToMarketFrac);
@@ -63,6 +99,7 @@ self.onmessage = (e: MessageEvent<ToWorker>) => {
             m.policy.rawToReserveFrac = rv / sum;
           }
           m.policy.forcedIntervention = !!msg.policy.forcedIntervention;
+          logPolicyChange(world, m.isPlayer, before, m.policy);
         }
         break;
       }

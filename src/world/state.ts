@@ -31,6 +31,7 @@ export interface Market {
   rawReserves: number; // persistent pool of retained raw; funds the Forced-Intervention burst
   pendingBurst: boolean; // a queued territory-burst awaiting sufficient reserves
   pendingBurstCost: number; // raw cost stored at queue time (= BURST_RAW_COST_MULT * cycle rawMined)
+  pendingBurstTech: number; // techLevel that triggered the pending burst (for the event message)
   cells: Set<number>;
   colorHue: number;
   desireToConsume: number;
@@ -73,6 +74,23 @@ export interface YearLog {
   population: number;
 }
 
+// Player-facing "major historical events" feed. Derived data only (never affects sim RNG / state
+// evolution), but persisted with the world so the log survives save/load.
+export type EventKind =
+  | 'epoch' // world founded (year 0)
+  | 'tech' // a technology was discovered
+  | 'intervention' // a Forced-Intervention territory burst fired
+  | 'boom' // a large single-year population gain
+  | 'dieoff' // a large single-year population loss
+  | 'encounter' // a rival-market encounter milestone was reached
+  | 'policy'; // the player changed their allocation policy
+
+export interface GameEvent {
+  year: number;
+  kind: EventKind;
+  text: string;
+}
+
 export interface WorldState {
   seed: number;
   width: number;
@@ -80,6 +98,8 @@ export interface WorldState {
   year: number;
   finalTechYear: number; // year the player unlocked the final tech, else -1
   log: YearLog[];
+  events: GameEvent[]; // major historical events (player-facing)
+  encounteredMarkets: Set<number>; // rival market ids whose territory the player has discovered
   // Land SoA
   foodYield: Float32Array;
   rawYield: Float32Array;
@@ -261,6 +281,7 @@ function makeMarket(id: number, isPlayer: boolean, propensityToExpand: number): 
     rawReserves: 0,
     pendingBurst: false,
     pendingBurstCost: 0,
+    pendingBurstTech: 0,
     cells: new Set<number>(),
     colorHue: (210 + id * 137.508) % 360,
     desireToConsume: 0,
@@ -306,11 +327,37 @@ function reveal(s: WorldState, cell: number): void {
 }
 
 // Reveal fog around all player-owned cells (8-neighborhood), so any market the player is
-// adjacent to becomes visible on the map with its live person count + color.
+// adjacent to becomes visible on the map with its live person count + color. Records any rival
+// market whose territory is newly revealed into s.encounteredMarkets (drives encounter events).
 export function revealPlayerVision(s: WorldState): void {
   const player = s.markets[0];
   if (!player) return;
-  for (const cell of player.cells) reveal(s, cell);
+  const W = s.width;
+  const H = s.height;
+  for (const cell of player.cells) {
+    const x = cell % W;
+    const y = (cell / W) | 0;
+    for (let dy = -1; dy <= 1; dy++) {
+      const ny = y + dy;
+      if (ny < 0 || ny >= H) continue;
+      for (let dx = -1; dx <= 1; dx++) {
+        const nx = x + dx;
+        if (nx < 0 || nx >= W) continue;
+        const nc = ny * W + nx;
+        if (s.discovered[nc] === 1) continue; // already seen
+        s.discovered[nc] = 1;
+        const owner = s.marketId[nc];
+        if (owner >= 1) s.encounteredMarkets.add(owner); // owner 0 is the player; -1 is unowned
+      }
+    }
+  }
+}
+
+// Append a major historical event (player-facing). Bounded so a very long game can't grow it
+// without limit; the oldest events drop first.
+export function logEvent(s: WorldState, kind: EventKind, text: string): void {
+  s.events.push({ year: s.year, kind, text });
+  if (s.events.length > CONFIG.EVENT_LOG_MAX) s.events.shift();
 }
 
 function claimCell(s: WorldState, cell: number, m: Market): void {
@@ -345,6 +392,8 @@ export function createWorld(
     year: 0,
     finalTechYear: -1,
     log: [],
+    events: [],
+    encounteredMarkets: new Set<number>(),
     foodYield: terrain.foodYield,
     rawYield: terrain.rawYield,
     rawStock: new Float32Array(n),
@@ -424,6 +473,7 @@ export function createWorld(
 
   s.rngState = rng.getState();
   refreshDerived(s);
+  logEvent(s, 'epoch', 'Epoch \u2014 your market is founded');
   return s;
 }
 
@@ -438,6 +488,8 @@ export interface SerializedState {
   year: number;
   finalTechYear: number;
   log: YearLog[];
+  events: GameEvent[];
+  encounteredMarkets: number[];
   foodYield: string;
   rawYield: string;
   rawStock: string;
@@ -460,6 +512,9 @@ export function serialize(s: WorldState): SerializedState {
     year: s.year,
     finalTechYear: s.finalTechYear,
     log: s.log,
+    events: s.events,
+    // sorted for a stable serialization regardless of insertion order (round-trip determinism)
+    encounteredMarkets: [...s.encounteredMarkets].sort((a, b) => a - b),
     foodYield: encodeF32(s.foodYield),
     rawYield: encodeF32(s.rawYield),
     rawStock: encodeF32(s.rawStock),
@@ -486,6 +541,8 @@ export function deserialize(p: SerializedState): WorldState {
     year: p.year,
     finalTechYear: p.finalTechYear,
     log: p.log ?? [],
+    events: p.events ?? [],
+    encounteredMarkets: new Set<number>(p.encounteredMarkets ?? []),
     foodYield: decodeF32(p.foodYield),
     rawYield: decodeF32(p.rawYield),
     rawStock: decodeF32(p.rawStock),
@@ -517,6 +574,7 @@ export function deserialize(p: SerializedState): WorldState {
       rawReserves: m.rawReserves ?? 0,
       pendingBurst: m.pendingBurst ?? false,
       pendingBurstCost: m.pendingBurstCost ?? 0,
+      pendingBurstTech: m.pendingBurstTech ?? 0,
       rawToReserveThisCycle: m.rawToReserveThisCycle ?? 0,
       cells: new Set<number>(m.cells),
     })),

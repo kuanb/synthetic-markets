@@ -114,6 +114,13 @@ export const CONFIG = {
   // conflict
   CONFLICT_GATE: 0.1,
 
+  // historical events (the player-facing "major events" feed)
+  EVENT_DIEOFF_FRAC: 0.1, // net player population LOSS in a single year that logs a "die-off"
+  EVENT_BOOM_FRAC: 0.25, // net player population GAIN in a single year that logs a "boom"
+  EVENT_MIN_POP_FOR_DELTA: 25, // ignore die-off/boom below this pop (avoids tiny early-game noise)
+  EVENT_ENCOUNTER_MILESTONES: [1, 3, 5, 10, 25, 50, 100, 250, 500], // rival-encounter count milestones
+  EVENT_LOG_MAX: 500, // cap retained events (oldest dropped beyond this)
+
   // turn
   YEARS_PER_TURN_OPTIONS: [10, 50, 250],
   DEFAULT_YEARS_PER_TURN: 10,

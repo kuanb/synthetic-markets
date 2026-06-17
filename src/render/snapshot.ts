@@ -3,6 +3,7 @@
 import {
   type WorldState,
   type YearLog,
+  type GameEvent,
   isWild,
   groupIdOf,
   orientation,
@@ -63,6 +64,7 @@ export interface Snapshot {
   // every summary each snapshot would be wasteful and the UI only reads the player's.
   markets: MarketSummary[];
   log: YearLog[]; // full per-year player history (for the sidebar mini-charts)
+  events: GameEvent[]; // major historical events (for the top-right events feed)
 }
 
 export function wildHue(groupId: number): number {
@@ -162,5 +164,6 @@ export function buildSnapshot(s: WorldState): Snapshot {
     rawDisplay,
     markets,
     log: s.log,
+    events: s.events,
   };
 }

@@ -2,8 +2,9 @@
 // tickBatch() loops up to N years, stopping early on a §6 end condition.
 
 import type { RNG } from '../world/rng';
-import { type Market, type WorldState, revealPlayerVision } from '../world/state';
+import { type Market, type WorldState, logEvent, revealPlayerVision } from '../world/state';
 import { RNG_SALT } from '../config';
+import { formatNumber } from '../render/format';
 import {
   produce,
   accrueGoods,
@@ -15,7 +16,7 @@ import { births, moveIntents, updatePropensity } from './agents';
 import { resolveMove } from './conflict';
 import { runAiPolicy } from './ai';
 import { fireBurst } from './burst';
-import { researchCost, maxTechLevel } from './tech';
+import { researchCost, maxTechLevel, techName } from './tech';
 import { CONFIG } from '../config';
 
 export type EndState = { over: false } | { over: true; outcome: 'win' | 'loss' };
@@ -65,10 +66,16 @@ export function tick(state: WorldState, rng: RNG): void {
 
   const deficitCells = new Set<number>();
 
+  // Snapshot for the historical-events feed: player population entering the year.
+  const playerPopStart = state.markets[0].population;
+
   // Steps 1-8, fixed order.
   const playerLvlBefore = state.markets[0].techLevel;
   for (const m of state.markets) techUnlock(state, m); // 1
   const playerUnlocked = state.markets[0].techLevel > playerLvlBefore;
+  if (playerUnlocked) {
+    logEvent(state, 'tech', `Discovered ${techName(state.markets[0].techLevel)}`);
+  }
   births(state, rngBirth); // 2 (single global pass)
   for (const m of state.markets) {
     const food = produce(state, m, deficitCells); // 3 + 4 (production + three-way raw disposition)
@@ -86,26 +93,74 @@ export function tick(state: WorldState, rng: RNG): void {
   // burst whose cost is fixed at BURST_RAW_COST_MULT * this cycle's total raw mined. Keep at most
   // one pending burst. Fire it (deduct reserves) as soon as reserves cover the stored cost.
   const player = state.markets[0];
+  let interventionFired = false;
   if (player.isPlayer) {
     if (playerUnlocked && player.policy.forcedIntervention && !player.pendingBurst) {
       player.pendingBurst = true;
       player.pendingBurstCost = CONFIG.BURST_RAW_COST_MULT * player.rawMinedThisYear;
+      player.pendingBurstTech = player.techLevel; // remember what triggered it (for the event)
     }
     if (player.pendingBurst && player.rawReserves >= player.pendingBurstCost) {
       if (fireBurst(state, player, rngBurst)) {
         player.rawReserves -= player.pendingBurstCost;
         player.pendingBurst = false;
         player.pendingBurstCost = 0;
+        interventionFired = true;
+        logEvent(
+          state,
+          'intervention',
+          `Forced Intervention \u2014 territory burst to support ${techName(player.pendingBurstTech)}`,
+        );
       }
       // else: no reachable territory this cycle -> stays pending, reserves untouched
     }
   }
 
-  // Player vision: reveal neighbors of owned cells so adjacent markets become visible.
+  // Player vision: reveal neighbors of owned cells so adjacent markets become visible. Detect
+  // rival-encounter milestones crossed this year.
+  const encBefore = state.encounteredMarkets.size;
   revealPlayerVision(state);
+  const encAfter = state.encounteredMarkets.size;
+  if (encAfter > encBefore) {
+    let milestone = 0;
+    for (const m of CONFIG.EVENT_ENCOUNTER_MILESTONES) {
+      if (m > encBefore && m <= encAfter) milestone = m; // highest milestone crossed this year
+    }
+    if (milestone > 0) {
+      const pol = player.policy;
+      const pattern =
+        `${Math.round(pol.rawToMarketFrac * 100)}/${Math.round(pol.rawToTechFrac * 100)}/` +
+        `${Math.round(pol.rawToReserveFrac * 100)} mkt/tech/res`;
+      logEvent(
+        state,
+        'encounter',
+        milestone === 1
+          ? `First contact \u2014 encountered a rival market (allocation ${pattern})`
+          : `Encountered ${milestone} rival markets (allocation ${pattern})`,
+      );
+    }
+  }
 
   // Step 10: propensity.
   updatePropensity(state, deficitCells);
+
+  // Historical events: a large single-year swing in player population. A boom that merely reflects
+  // a Forced-Intervention annexation is suppressed (the intervention event already explains it).
+  const playerPopEnd = player.population;
+  if (playerPopStart >= CONFIG.EVENT_MIN_POP_FOR_DELTA) {
+    if (playerPopEnd <= playerPopStart * (1 - CONFIG.EVENT_DIEOFF_FRAC)) {
+      const lost = playerPopStart - playerPopEnd;
+      const pct = Math.round((lost / playerPopStart) * 100);
+      logEvent(state, 'dieoff', `Population crash \u2014 lost ${formatNumber(lost)} (\u2212${pct}%)`);
+    } else if (
+      !interventionFired &&
+      playerPopEnd >= playerPopStart * (1 + CONFIG.EVENT_BOOM_FRAC)
+    ) {
+      const gained = playerPopEnd - playerPopStart;
+      const pct = Math.round((gained / playerPopStart) * 100);
+      logEvent(state, 'boom', `Population boom \u2014 gained ${formatNumber(gained)} (+${pct}%)`);
+    }
+  }
 
   // Step 12: log player aggregate.
   state.log.push({
