@@ -51,9 +51,19 @@ export const CONFIG = {
   // Three-way raw allocation defaults (MUST sum to 1). Disposition of a market's MINABLE raw:
   //   market -> goods, tech -> research, unmined -> banks in rawStock ("pay dirt" reserve).
   // Low tech share by default so advancing is a deliberate strategic investment, not automatic.
+  // The reserve fraction (default 0.3) of MINED raw accumulates into Market.rawReserves — the
+  // pool that funds the Forced-Intervention tech-burst — so reserves build under default play.
   RAW_TO_MARKET_DEFAULT: 0.6,
   RAW_TO_TECH_DEFAULT: 0.1,
-  RAW_UNMINED_DEFAULT: 0.3,
+  RAW_RESERVE_DEFAULT: 0.3,
+
+  // Forced Intervention — Market Expansion (tech-triggered territory burst paid from rawReserves)
+  BURST_RAW_COST_MULT: 5, // cost = this * the market's total raw mined in the unlock cycle
+  BURST_MAX_RANGE: 250, // arm length cap (cells): L = min(R, BURST_MAX_RANGE)
+  ARM_WIDTH_MIN: 5,
+  ARM_WIDTH_MAX: 20,
+  TERMINUS_RADIUS_MIN: 15,
+  TERMINUS_RADIUS_MAX: 35,
 
   // tech
   TECH_MULTIPLIER: 1.5, // ext(level) = TECH_MULTIPLIER ^ level  (scales RAW->GOODS only)
@@ -111,6 +121,7 @@ export const RNG_SALT = {
   MOVEMENT: 6,
   CONFLICT: 7,
   AI: 8,
+  BURST: 9,
 } as const;
 
 // Index 0 = baseline "(none)" (ext = 1.0). Index 1 = Hoe. 45 real technologies.

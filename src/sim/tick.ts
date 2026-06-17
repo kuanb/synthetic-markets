@@ -10,12 +10,13 @@ import {
   foodDeaths,
   goodsConsumptionAndDeaths,
   updateDesire,
-  burstSpend,
 } from './economy';
 import { births, moveIntents, updatePropensity } from './agents';
 import { resolveMove } from './conflict';
 import { runAiPolicy } from './ai';
+import { fireBurst } from './burst';
 import { researchCost, maxTechLevel } from './tech';
+import { CONFIG } from '../config';
 
 export type EndState = { over: false } | { over: true; outcome: 'win' | 'loss' };
 
@@ -23,7 +24,7 @@ function resetAccumulators(m: Market): void {
   m.goodsProducedThisCycle = 0;
   m.goodsConsumedThisCycle = 0;
   m.rawToMarketThisCycle = 0;
-  m.rawLeftUnminedThisCycle = 0;
+  m.rawToReserveThisCycle = 0;
   m.bornThisYear = 0;
   m.diedThisYear = 0;
   m.foodThisYear = 0;
@@ -51,6 +52,7 @@ export function tick(state: WorldState, rng: RNG): void {
   const rngGoods = rng.fork(RNG_SALT.GOODS_DEATHS + y);
   const rngMove = rng.fork(RNG_SALT.MOVEMENT + y);
   const rngConflict = rng.fork(RNG_SALT.CONFLICT + y);
+  const rngBurst = rng.fork(RNG_SALT.BURST + y);
 
   // Step 0: prep
   refreshDerived(state);
@@ -58,14 +60,13 @@ export function tick(state: WorldState, rng: RNG): void {
     resetAccumulators(m);
     runAiPolicy(state, m, rngAi);
   }
-  // Player forced intervention (market expansion): auto-applied each cycle while affordable.
-  const player0 = state.markets[0];
-  if (player0.isPlayer && player0.policy.forcedIntervention) burstSpend(state, player0);
 
   const deficitCells = new Set<number>();
 
   // Steps 1-8, fixed order.
+  const playerLvlBefore = state.markets[0].techLevel;
   for (const m of state.markets) techUnlock(state, m); // 1
+  const playerUnlocked = state.markets[0].techLevel > playerLvlBefore;
   births(state, rngBirth); // 2 (single global pass)
   for (const m of state.markets) {
     const food = produce(state, m, deficitCells); // 3 + 4 (production + three-way raw disposition)
@@ -79,6 +80,25 @@ export function tick(state: WorldState, rng: RNG): void {
   const intents = moveIntents(state, rngMove);
   for (const intent of intents) resolveMove(state, intent, rngConflict);
 
+  // Forced Intervention — Market Expansion: on a NEW player tech (toggle ON) queue a territory
+  // burst whose cost is fixed at BURST_RAW_COST_MULT * this cycle's total raw mined. Keep at most
+  // one pending burst. Fire it (deduct reserves) as soon as reserves cover the stored cost.
+  const player = state.markets[0];
+  if (player.isPlayer) {
+    if (playerUnlocked && player.policy.forcedIntervention && !player.pendingBurst) {
+      player.pendingBurst = true;
+      player.pendingBurstCost = CONFIG.BURST_RAW_COST_MULT * player.rawMinedThisYear;
+    }
+    if (player.pendingBurst && player.rawReserves >= player.pendingBurstCost) {
+      if (fireBurst(state, player, rngBurst)) {
+        player.rawReserves -= player.pendingBurstCost;
+        player.pendingBurst = false;
+        player.pendingBurstCost = 0;
+      }
+      // else: no reachable territory this cycle -> stays pending, reserves untouched
+    }
+  }
+
   // Player vision: reveal neighbors of owned cells so adjacent markets become visible.
   revealPlayerVision(state);
 
@@ -86,7 +106,6 @@ export function tick(state: WorldState, rng: RNG): void {
   updatePropensity(state, deficitCells);
 
   // Step 12: log player aggregate.
-  const player = state.markets[0];
   state.log.push({
     year: state.year,
     born: player.bornThisYear,

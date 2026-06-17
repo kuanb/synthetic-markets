@@ -26,11 +26,11 @@ export function runAiPolicy(s: WorldState, m: Market, rng: RNG): void {
   if (expansionary) {
     m.policy.rawToMarketFrac = 0.85;
     m.policy.rawToTechFrac = 0.1;
-    m.policy.rawUnminedFrac = 0.05;
+    m.policy.rawToReserveFrac = 0.05;
   } else {
     m.policy.rawToMarketFrac = 0.5;
     m.policy.rawToTechFrac = 0.2;
-    m.policy.rawUnminedFrac = 0.3;
+    m.policy.rawToReserveFrac = 0.3;
   }
 
   if (expansionary) burstSpend(s, m);

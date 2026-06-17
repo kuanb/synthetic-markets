@@ -14,12 +14,12 @@ import {
 
 export interface Policy {
   laborToFoodFrac: number; // [0,1]; mining-labor frac = 1 - this
-  // Three-way disposition of MINABLE raw (rawYield + rawStock). These three MUST sum to 1:
+  // Three-way disposition of MINED raw (sums to 1):
   rawToMarketFrac: number; //  -> goods (capitalWealth), tech-scaled in step 5
   rawToTechFrac: number; //    -> techProgress (research)
-  rawUnminedFrac: number; //   -> left in the ground, banks in rawStock
-  // Player-only: when true, the forced intervention (market expansion / burst spend) is
-  // auto-applied every cycle while affordable. Unused for AI markets.
+  rawToReserveFrac: number; // -> accumulates into Market.rawReserves (funds the tech-burst)
+  // Player-only: when ON, unlocking a NEW technology queues a territory-burst paid from
+  // rawReserves (see sim/burst.ts). Unused for AI markets.
   forcedIntervention: boolean;
 }
 
@@ -28,6 +28,9 @@ export interface Market {
   techLevel: number;
   techProgress: number;
   capitalWealth: number;
+  rawReserves: number; // persistent pool of retained raw; funds the Forced-Intervention burst
+  pendingBurst: boolean; // a queued territory-burst awaiting sufficient reserves
+  pendingBurstCost: number; // raw cost stored at queue time (= BURST_RAW_COST_MULT * cycle rawMined)
   cells: Set<number>;
   colorHue: number;
   desireToConsume: number;
@@ -38,7 +41,7 @@ export interface Market {
   goodsProducedThisCycle: number;
   goodsConsumedThisCycle: number;
   rawToMarketThisCycle: number;
-  rawLeftUnminedThisCycle: number;
+  rawToReserveThisCycle: number; // raw allocated to reserves this cycle (orientation denominator)
   bornThisYear: number;
   diedThisYear: number; // reset every simulated year (drives the per-year log)
   diedThisTurn: number; // accumulated across all years of the most recent End Turn batch
@@ -231,8 +234,10 @@ export function marketPopulation(s: WorldState, marketId: number): number {
   return n;
 }
 
+// Growth-vs-holding-back: mined raw pushed to MARKET vs retained in RESERVES (research excluded).
+// In [0,1]; 0 if neither (the 0/0 guard).
 export function orientation(m: Market): number {
-  const denom = m.rawToMarketThisCycle + m.rawLeftUnminedThisCycle;
+  const denom = m.rawToMarketThisCycle + m.rawToReserveThisCycle;
   if (denom <= 0) return 0;
   return m.rawToMarketThisCycle / denom;
 }
@@ -253,6 +258,9 @@ function makeMarket(id: number, isPlayer: boolean, propensityToExpand: number): 
     techLevel: 0,
     techProgress: 0,
     capitalWealth: 0,
+    rawReserves: 0,
+    pendingBurst: false,
+    pendingBurstCost: 0,
     cells: new Set<number>(),
     colorHue: (210 + id * 137.508) % 360,
     desireToConsume: 0,
@@ -260,7 +268,7 @@ function makeMarket(id: number, isPlayer: boolean, propensityToExpand: number): 
       laborToFoodFrac: CONFIG.LABOR_TO_FOOD_DEFAULT,
       rawToMarketFrac: CONFIG.RAW_TO_MARKET_DEFAULT,
       rawToTechFrac: CONFIG.RAW_TO_TECH_DEFAULT,
-      rawUnminedFrac: CONFIG.RAW_UNMINED_DEFAULT,
+      rawToReserveFrac: CONFIG.RAW_RESERVE_DEFAULT,
       forcedIntervention: false,
     },
     propensityToExpand,
@@ -268,7 +276,7 @@ function makeMarket(id: number, isPlayer: boolean, propensityToExpand: number): 
     goodsProducedThisCycle: 0,
     goodsConsumedThisCycle: 0,
     rawToMarketThisCycle: 0,
-    rawLeftUnminedThisCycle: 0,
+    rawToReserveThisCycle: 0,
     bornThisYear: 0,
     diedThisYear: 0,
     diedThisTurn: 0,
@@ -506,6 +514,10 @@ export function deserialize(p: SerializedState): WorldState {
       goodsDeathsTotal: m.goodsDeathsTotal ?? 0,
       rawMinedThisYear: m.rawMinedThisYear ?? 0,
       techInvestedThisYear: m.techInvestedThisYear ?? 0,
+      rawReserves: m.rawReserves ?? 0,
+      pendingBurst: m.pendingBurst ?? false,
+      pendingBurstCost: m.pendingBurstCost ?? 0,
+      rawToReserveThisCycle: m.rawToReserveThisCycle ?? 0,
       cells: new Set<number>(m.cells),
     })),
     nextWildGroupId: p.nextWildGroupId,

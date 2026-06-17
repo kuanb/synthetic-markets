@@ -50,17 +50,15 @@ function killRandom(s: WorldState, pool: number[], count: number, rng: RNG): num
 }
 
 // Steps 3+4: production + raw disposition across all owned cells of a market.
-// Labor split (food vs mining) sets the MINING CAPACITY per cell; the three-way raw policy sets
-// the TARGET disposition of each cell's minable raw (market / tech / leave-unmined). The amount
-// actually mined is min(capacity, market+tech target); any shortfall (and the deliberate unmined
-// share) banks in rawStock. Mined raw is split market:tech by their ratio. Research raw is
-// excluded from orientation. Records local food deficits into `deficitCells` (for step 10).
+// Labor split (food vs mining) sets the MINING CAPACITY per cell. Each cell mines
+// min(miningLabor, rawYield+rawStock); any labour-limited remainder BANKS in rawStock. The mined
+// raw is split by the three-way policy: market -> goods, tech -> research, reserve -> rawReserves.
+// Research raw is excluded from orientation. Records local food deficits into `deficitCells`.
 export function produce(s: WorldState, m: Market, deficitCells: Set<number>): number {
   let totalFood = 0;
   const fe = foodExt(m.techLevel); // land-limited food factor (NOT ext)
-  const mineTargetFrac = m.policy.rawToMarketFrac + m.policy.rawToTechFrac; // = 1 - unminedFrac
-  const denom = mineTargetFrac;
-  const marketShare = denom > 0 ? m.policy.rawToMarketFrac / denom : 0;
+  const mFrac = m.policy.rawToMarketFrac;
+  const tFrac = m.policy.rawToTechFrac;
   for (const cell of m.cells) {
     const labor = cellLabor(s, cell, m.id);
     if (labor <= 0) continue;
@@ -69,16 +67,16 @@ export function produce(s: WorldState, m: Market, deficitCells: Set<number>): nu
     const food = Math.min(laborToFood, s.foodYield[cell]) * fe;
 
     const minable = s.rawYield[cell] + s.rawStock[cell];
-    const desiredMined = minable * mineTargetFrac; // raw we WANT to extract (rest left in ground)
-    const mined = Math.min(laborToRaw, desiredMined); // capped by mining labor
-    const unmined = minable - mined;
-    s.rawStock[cell] = unmined;
+    const mined = Math.min(laborToRaw, minable); // capped by mining labor
+    s.rawStock[cell] = minable - mined; // labour-limited remainder banks in the ground
 
-    const toMarket = mined * marketShare;
-    const toTech = mined - toMarket;
+    const toMarket = mined * mFrac;
+    const toTech = mined * tFrac;
+    const toReserve = mined - toMarket - toTech; // = mined * rawToReserveFrac (fracs sum to 1)
     m.rawToMarketThisCycle += toMarket;
     m.techProgress += toTech;
-    m.rawLeftUnminedThisCycle += unmined;
+    m.rawReserves += toReserve;
+    m.rawToReserveThisCycle += toReserve;
     m.rawMinedThisYear += mined;
     m.techInvestedThisYear += toTech;
 
