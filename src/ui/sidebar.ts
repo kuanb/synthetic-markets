@@ -339,6 +339,7 @@ export function mountSidebar(
           : '0',
     ],
     ['Orientation', (s) => s.markets[0].orientation.toFixed(2)],
+    ['Wealth concentration', (s) => `${s.markets[0].wealthConcentration.toFixed(0)}%`],
     // yield efficiency: captured vs full land potential over owned cells (this cycle)
     [
       'Food yield (cap/util)',

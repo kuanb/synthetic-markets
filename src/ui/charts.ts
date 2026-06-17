@@ -30,6 +30,7 @@ const DEFS: ChartDef[] = [
   { label: 'Food produced / yr', color: '#6fd98a', pick: (l) => l.food },
   { label: 'Market goods / yr', color: '#d9c46f', pick: (l) => l.goods },
   { label: 'Tech invested / yr', color: '#9a6fd9', pick: (l) => l.techInvested },
+  { label: 'Wealth concentration %', color: '#e6a06f', pick: (l) => l.wealthConcentration ?? 0 },
 ];
 
 const css = `

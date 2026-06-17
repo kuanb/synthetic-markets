@@ -2,7 +2,13 @@
 // tickBatch() loops up to N years, stopping early on a §6 end condition.
 
 import type { RNG } from '../world/rng';
-import { type Market, type WorldState, logEvent, revealPlayerVision } from '../world/state';
+import {
+  type Market,
+  type WorldState,
+  logEvent,
+  revealPlayerVision,
+  wealthConcentration,
+} from '../world/state';
 import { RNG_SALT } from '../config';
 import { formatNumber } from '../render/format';
 import {
@@ -170,6 +176,7 @@ export function tick(state: WorldState, rng: RNG): void {
     techInvested: player.techInvestedThisYear,
     capitalWealth: player.capitalWealth,
     population: player.population,
+    wealthConcentration: wealthConcentration(player),
   });
 
   state.year++;

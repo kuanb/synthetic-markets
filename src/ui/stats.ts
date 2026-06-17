@@ -95,6 +95,8 @@ export function showSummary(root: HTMLElement, outcome: 'win' | 'loss', log: Yea
   const totalGoods = log.reduce((a, l) => a + l.goods, 0);
   const peakPop = log.reduce((a, l) => Math.max(a, l.population), 0);
   const finalYear = log.length ? log[log.length - 1].year : 0;
+  const peakWealthConc = log.reduce((a, l) => Math.max(a, l.wealthConcentration ?? 0), 0);
+  const finalWealthConc = log.length ? (log[log.length - 1].wealthConcentration ?? 0) : 0;
 
   const overlay = document.createElement('div');
   overlay.setAttribute('data-sm-overlay', '');
@@ -110,6 +112,17 @@ export function showSummary(root: HTMLElement, outcome: 'win' | 'loss', log: Yea
     <div style="color:#777;margin-bottom:14px">${
       win ? 'You researched every technology.' : 'Your market reached zero.'
     } Year ${finalYear}.</div>
+    <div style="margin:0 0 14px;padding:10px 12px;border:1px solid #5a3a3a;border-radius:5px;
+      background:#1a0f0f">
+      <div style="color:#e6a06f;font-size:11px;letter-spacing:.08em;text-transform:uppercase">
+        Wealth concentration</div>
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:3px">
+        <span style="font-size:20px;font-weight:600;color:#fff">${peakWealthConc.toFixed(0)}%</span>
+        <span style="color:#9aa;font-size:12px">peak \u00b7 ${finalWealthConc.toFixed(0)}% final</span>
+      </div>
+      <div style="color:#7d8590;font-size:11px;margin-top:4px">Food-land the densest 10% of the
+        population required, as a share of total capacity. Higher = more unbalanced.</div>
+    </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 16px;font-size:13px">
       <div style="display:flex;justify-content:space-between"><span style="color:#888">Peak population</span><b>${formatNumber(
         peakPop,
@@ -144,6 +157,9 @@ export function showSummary(root: HTMLElement, outcome: 'win' | 'loss', log: Yea
   card.appendChild(lineChart('Born / yr', log, (l) => l.born, '#6fd98a', tip));
   card.appendChild(lineChart('Died / yr', log, (l) => l.died, '#d96f6f', tip));
   card.appendChild(lineChart('Capital Wealth', log, (l) => l.capitalWealth, '#d9c46f', tip));
+  card.appendChild(
+    lineChart('Wealth concentration %', log, (l) => l.wealthConcentration ?? 0, '#e6a06f', tip),
+  );
 
   const again = document.createElement('button');
   again.textContent = 'New World';

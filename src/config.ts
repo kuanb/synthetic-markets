@@ -140,6 +140,11 @@ export const CONFIG = {
   OTHER_MARKETS_SHOWN: 5, // # of largest discovered+alive rival markets listed in the side panel
   EVENT_MARKET_SWING_FRAC: 0.5, // single-year ±pop swing of a top-5 discovered market that logs an event
 
+  // Wealth Concentration: the food-land the densest WEALTH_TOP_FRACTION of the population requires,
+  // as a % of the market's total food capacity. ~10% when the land comfortably feeds everyone;
+  // climbs past 100% when population is crammed far beyond what the land can support (imbalance).
+  WEALTH_TOP_FRACTION: 0.1,
+
   // turn
   YEARS_PER_TURN_OPTIONS: [10, 50, 250],
   DEFAULT_YEARS_PER_TURN: 10,

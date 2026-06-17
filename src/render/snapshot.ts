@@ -7,6 +7,7 @@ import {
   isWild,
   groupIdOf,
   orientation,
+  wealthConcentration,
 } from '../world/state';
 import { ext, researchCost, maxTechLevel, techName } from '../sim/tech';
 import { CONFIG } from '../config';
@@ -40,6 +41,7 @@ export interface MarketSummary {
   foodDeathsTotal: number;
   goodsDeathsTotal: number;
   orientation: number;
+  wealthConcentration: number; // % of food capacity the densest decile of the population needs
   // yield efficiency (this cycle): captured vs full land potential over owned cells
   foodPotential: number;
   foodCaptured: number;
@@ -158,6 +160,7 @@ export function buildSnapshot(s: WorldState): Snapshot {
     foodDeathsTotal: m.foodDeathsTotal,
     goodsDeathsTotal: m.goodsDeathsTotal,
     orientation: orientation(m),
+    wealthConcentration: wealthConcentration(m),
     foodPotential: m.foodPotentialThisCycle,
     foodCaptured: m.foodThisYear,
     rawPotential: m.rawPotentialThisCycle,

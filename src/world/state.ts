@@ -79,6 +79,7 @@ export interface YearLog {
   techInvested: number;
   capitalWealth: number;
   population: number;
+  wealthConcentration: number; // % of food capacity the densest decile of the population needs
 }
 
 // Player-facing "major historical events" feed. Derived data only (never affects sim RNG / state
@@ -268,6 +269,16 @@ export function orientation(m: Market): number {
   const denom = m.rawToMarketThisCycle + m.rawToReserveThisCycle;
   if (denom <= 0) return 0;
   return m.rawToMarketThisCycle / denom;
+}
+
+// Wealth Concentration (%): the food-land the densest WEALTH_TOP_FRACTION of the population needs,
+// expressed as a percentage of the market's total food capacity (foodPotentialThisCycle = Σ
+// foodYield*foodExt over owned cells). ~10% when the land comfortably feeds the population; rises
+// past 100% when the population is crammed far beyond what the land can support — the imbalance the
+// metric is meant to surface. 0 when there is no food capacity (no cells).
+export function wealthConcentration(m: Market): number {
+  if (m.foodPotentialThisCycle <= 0) return 0;
+  return ((CONFIG.WEALTH_TOP_FRACTION * m.population) / m.foodPotentialThisCycle) * 100;
 }
 
 export function refreshDerived(s: WorldState): void {
