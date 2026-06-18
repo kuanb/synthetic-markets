@@ -285,6 +285,11 @@ export function mountSidebar(
   const renderAuto = () => {
     autoBtn.classList.toggle('active', autoOn);
     autoBtn.textContent = autoOn ? 'AUTO-PLAY: ON \u23f8' : 'AUTO-PLAY: OFF \u25b6';
+    // End Turn is redundant (and would double-step) while auto-play runs — grey it out + disable.
+    endBtn.disabled = autoOn;
+    endBtn.style.opacity = autoOn ? '0.4' : '';
+    endBtn.style.pointerEvents = autoOn ? 'none' : '';
+    endBtn.style.cursor = autoOn ? 'not-allowed' : '';
   };
   renderAuto();
   autoBtn.onclick = () => {
