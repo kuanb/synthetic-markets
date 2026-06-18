@@ -653,20 +653,6 @@ function openSettings(): void {
   };
   card.appendChild(newGameBtn);
 
-  // Debug-log export: hands the AI the events + per-year history to diagnose a run.
-  const dlBtn = document.createElement('button');
-  dlBtn.textContent = 'DOWNLOAD DEBUG LOG (JSON)';
-  dlBtn.style.cssText =
-    'width:100%;background:#111;color:#ccc;border:1px solid #2a2a2a;padding:9px;font:inherit;' +
-    'cursor:pointer;border-radius:3px;margin:0 0 4px;';
-  dlBtn.onclick = downloadDebugLog;
-  card.appendChild(dlBtn);
-  const dlHint = document.createElement('div');
-  dlHint.textContent =
-    'Exports the chronicle + full per-year history (population, food, goods, tech, deaths) as JSON.';
-  dlHint.style.cssText = 'color:#7d8590;font-size:11px;margin-bottom:4px;';
-  card.appendChild(dlHint);
-
   // ---- About Game ----
   const hr = document.createElement('div');
   hr.style.cssText = 'border-top:1px solid #1c1c1c;margin:16px 0 12px;';
@@ -685,6 +671,23 @@ function openSettings(): void {
     p.style.cssText = 'color:#aeb8c2;margin-bottom:10px;';
     card.appendChild(p);
   }
+
+  // ---- Debug log export (unrelated to new-game settings; lives at the very bottom) ----
+  const dlHr = document.createElement('div');
+  dlHr.style.cssText = 'border-top:1px solid #1c1c1c;margin:16px 0 12px;';
+  card.appendChild(dlHr);
+  const dlBtn = document.createElement('button');
+  dlBtn.textContent = 'DOWNLOAD DEBUG LOG (JSON)';
+  dlBtn.style.cssText =
+    'width:100%;background:#111;color:#ccc;border:1px solid #2a2a2a;padding:9px;font:inherit;' +
+    'cursor:pointer;border-radius:3px;margin:0 0 4px;';
+  dlBtn.onclick = downloadDebugLog;
+  card.appendChild(dlBtn);
+  const dlHint = document.createElement('div');
+  dlHint.textContent =
+    'Exports the chronicle + full per-year history (population, food, goods, tech, deaths) as JSON.';
+  dlHint.style.cssText = 'color:#7d8590;font-size:11px;';
+  card.appendChild(dlHint);
 
   overlay.appendChild(card);
   document.body.appendChild(overlay);
