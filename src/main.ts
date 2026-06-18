@@ -512,6 +512,7 @@ const ABOUT_PARAGRAPHS: string[] = [
   'This game started as an experiment inspired by economic historian Karl Polanyi and a simple question:',
   'Do markets emerge naturally, or are they built and maintained through rules, institutions, and intervention?',
   'In the simulation, technology, production, and demand can reinforce one another, creating periods of rapid growth. As these feedback loops strengthen, the economy becomes larger, faster, and more difficult to control. Crises emerge. Interventions become necessary. New incentives produce unintended consequences.',
+  "The simulation also explores the idea that rapid growth can generate social strain. As wealth becomes concentrated, food security weakens, or technological change outpaces society's ability to adapt, labor participation and market effectiveness can begin to decline.",
   'The goal is not to model the real world accurately. Instead, it is to explore how complex economic systems can emerge from simple rules, and how growth, technology, markets, and political intervention shape one another over time.',
   'Think of it less as a game and more as a toy model for asking: what actually drives markets?',
 ];
@@ -770,6 +771,19 @@ const HELP_SECTIONS: Array<{ h: string; body: string }> = [
       'a <b>blob</b> of new territory. Unowned and wild cells are seized freely; a rival\u2019s ' +
       'cells are taken <b>only where you out-tech that rival</b> \u2014 a more advanced market can ' +
       'block the corridor entirely.',
+  },
+  {
+    h: 'Society, stability &amp; labor',
+    body:
+      'Markets are sustained by the society inside them. <b>Social Stability</b> (0\u2013100) tracks ' +
+      'that society\u2019s capacity to keep participating in the market \u2014 it falls as <b>wealth ' +
+      'concentrates</b>, <b>food security weakens</b>, or <b>technology changes faster than people ' +
+      'can adapt</b> (each new tech is a temporary shock that fades over time). Low stability has ' +
+      'teeth: it cuts <b>Labor Efficiency</b> (how much of your workforce actually shows up \u2014 ' +
+      'scaling food, mining and research alike) and <b>Market Coverage</b> (how much of your output ' +
+      'the formal market captures, as activity slips informal \u2014 your territory is unaffected). ' +
+      'So racing for growth and tech can quietly undermine the workforce that powers it: watch the ' +
+      '<b>Social stability</b> chart (top-left) and the <b>Society</b> stats in the sidebar.',
   },
   {
     h: 'Winning, losing &amp; insurrection',
