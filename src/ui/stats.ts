@@ -3,12 +3,19 @@
 import type { YearLog } from '../world/state';
 import { formatNumber } from '../render/format';
 
+interface ChartSeries {
+  name: string;
+  color: string;
+  pick: (l: YearLog) => number;
+}
+
+// One mini line-chart that may overlay several series on a SHARED y-scale (e.g. two percentages).
 function lineChart(
   title: string,
   log: YearLog[],
-  pick: (l: YearLog) => number,
-  color: string,
+  series: ChartSeries[],
   tip: HTMLElement,
+  fmt: (v: number) => string = formatNumber,
 ): HTMLCanvasElement {
   const c = document.createElement('canvas');
   c.width = 420;
@@ -19,9 +26,10 @@ function lineChart(
   c.style.margin = '6px 0';
   c.style.cursor = 'crosshair';
   const ctx = c.getContext('2d')!;
-  const vals = log.map(pick);
-  const max = Math.max(1, ...vals);
-  const n = vals.length;
+  const cols = series.map((sd) => log.map(sd.pick));
+  const n = log.length;
+  let max = 1;
+  for (const vals of cols) for (const v of vals) if (v > max) max = v;
 
   const xOf = (i: number) => (n > 1 ? (i / (n - 1)) * (c.width - 8) + 4 : 4);
   const yOf = (v: number) => c.height - 16 - (v / max) * (c.height - 24);
@@ -29,34 +37,49 @@ function lineChart(
   function draw(hoverIdx?: number): void {
     ctx.fillStyle = '#0a0a0a';
     ctx.fillRect(0, 0, c.width, c.height);
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    vals.forEach((v, i) => {
-      const x = xOf(i);
-      const y = yOf(v);
-      if (i === 0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
+    cols.forEach((vals, si) => {
+      ctx.strokeStyle = series[si].color;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      vals.forEach((v, i) => {
+        const x = xOf(i);
+        const y = yOf(v);
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      });
+      ctx.stroke();
     });
-    ctx.stroke();
     if (hoverIdx !== undefined && hoverIdx >= 0 && hoverIdx < n) {
       const x = xOf(hoverIdx);
-      const y = yOf(vals[hoverIdx]);
       ctx.strokeStyle = 'rgba(255,255,255,0.3)';
       ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.moveTo(x + 0.5, 14);
       ctx.lineTo(x + 0.5, c.height);
       ctx.stroke();
-      ctx.fillStyle = color;
-      ctx.beginPath();
-      ctx.arc(x, y, 2.5, 0, Math.PI * 2);
-      ctx.fill();
+      cols.forEach((vals, si) => {
+        ctx.fillStyle = series[si].color;
+        ctx.beginPath();
+        ctx.arc(x, yOf(vals[hoverIdx]), 2.5, 0, Math.PI * 2);
+        ctx.fill();
+      });
     }
-    ctx.fillStyle = '#888';
     ctx.font = '11px ui-monospace, monospace';
     ctx.textAlign = 'left';
-    ctx.fillText(`${title} (peak ${formatNumber(max)})`, 6, 12);
+    if (series.length === 1) {
+      ctx.fillStyle = '#888';
+      ctx.fillText(`${title} (peak ${fmt(max)})`, 6, 12);
+    } else {
+      // Title in muted gray, then a colored legend chip per series.
+      ctx.fillStyle = '#888';
+      ctx.fillText(`${title}`, 6, 12);
+      let lx = 6 + ctx.measureText(`${title}  `).width;
+      for (const sd of series) {
+        ctx.fillStyle = sd.color;
+        ctx.fillText(`\u25cf ${sd.name}`, lx, 12);
+        lx += ctx.measureText(`\u25cf ${sd.name}   `).width;
+      }
+    }
   }
 
   draw();
@@ -69,7 +92,11 @@ function lineChart(
     const i = n > 1 ? Math.round(((cx - 4) / (c.width - 8)) * (n - 1)) : 0;
     const idx = Math.max(0, Math.min(n - 1, i));
     draw(idx);
-    tip.innerHTML = `${title}<br/>yr <b>${log[idx].year}</b> \u00b7 <b>${formatNumber(vals[idx])}</b>`;
+    let html = `${title}<br/>yr <b>${log[idx].year}</b>`;
+    series.forEach((sd, si) => {
+      html += ` \u00b7 <span style="color:${sd.color}">${sd.name}</span> <b>${fmt(cols[si][idx])}</b>`;
+    });
+    tip.innerHTML = html;
     tip.style.display = 'block';
     const tw = tip.offsetWidth;
     const th = tip.offsetHeight;
@@ -95,12 +122,19 @@ export function showSummary(root: HTMLElement, outcome: 'win' | 'loss', log: Yea
   const totalGoods = log.reduce((a, l) => a + l.goods, 0);
   const peakPop = log.reduce((a, l) => Math.max(a, l.population), 0);
   const finalYear = log.length ? log[log.length - 1].year : 0;
-  // Average over the whole run (the early-game spike is a meaningless transient; the mean over
-  // thousands of years reflects what concentration actually was for most of history).
-  const avgWealthConc = log.length
-    ? log.reduce((a, l) => a + (l.wealthConcentration ?? 0), 0) / log.length
+  // Population-weighted average over the whole run: each year's concentration counts in proportion
+  // to how many people lived that year. This stops thousands of near-empty post-collapse years (where
+  // a handful of survivors trivially "own everything") from dominating the score, and reflects what
+  // concentration was while the civilization actually had a population.
+  const popYears = log.reduce((a, l) => a + l.population, 0);
+  const avgWealthConc = popYears
+    ? log.reduce((a, l) => a + (l.wealthConcentration ?? 0) * l.population, 0) / popYears
     : 0;
   const finalWealthConc = log.length ? (log[log.length - 1].wealthConcentration ?? 0) : 0;
+  const avgStarvation = log.length
+    ? log.reduce((a, l) => a + (l.starvationIndex ?? 0), 0) / log.length
+    : 0;
+  const peakStarvation = log.reduce((a, l) => Math.max(a, l.starvationIndex ?? 0), 0);
 
   const overlay = document.createElement('div');
   overlay.setAttribute('data-sm-overlay', '');
@@ -122,7 +156,7 @@ export function showSummary(root: HTMLElement, outcome: 'win' | 'loss', log: Yea
         Wealth concentration</div>
       <div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:3px">
         <span style="font-size:20px;font-weight:600;color:#fff">${avgWealthConc.toFixed(0)}%</span>
-        <span style="color:#9aa;font-size:12px">avg over history \u00b7 ${finalWealthConc.toFixed(
+        <span style="color:#9aa;font-size:12px">pop-weighted avg \u00b7 ${finalWealthConc.toFixed(
           0,
         )}% final</span>
       </div>
@@ -149,6 +183,12 @@ export function showSummary(root: HTMLElement, outcome: 'win' | 'loss', log: Yea
       <div style="display:flex;justify-content:space-between"><span style="color:#888">Total goods</span><b>${formatNumber(
         totalGoods,
       )}</b></div>
+      <div style="display:flex;justify-content:space-between"><span style="color:#888">Avg starvation</span><b>${avgStarvation.toFixed(
+        1,
+      )}%</b></div>
+      <div style="display:flex;justify-content:space-between"><span style="color:#888">Peak starvation</span><b>${peakStarvation.toFixed(
+        0,
+      )}%</b></div>
     </div>
   `;
   // Shared hover tooltip for the mini-charts (fixed-position so it isn't clipped by the card).
@@ -160,12 +200,35 @@ export function showSummary(root: HTMLElement, outcome: 'win' | 'loss', log: Yea
     box-shadow:0 2px 10px rgba(0,0,0,0.6);`;
   document.body.appendChild(tip);
 
-  card.appendChild(lineChart('Population', log, (l) => l.population, '#6fd9d9', tip));
-  card.appendChild(lineChart('Born / yr', log, (l) => l.born, '#6fd98a', tip));
-  card.appendChild(lineChart('Died / yr', log, (l) => l.died, '#d96f6f', tip));
-  card.appendChild(lineChart('Capital Wealth', log, (l) => l.capitalWealth, '#d9c46f', tip));
+  const pct = (v: number) => `${Math.round(v)}%`;
   card.appendChild(
-    lineChart('Wealth concentration %', log, (l) => l.wealthConcentration ?? 0, '#e6a06f', tip),
+    lineChart('Population', log, [{ name: 'Population', color: '#6fd9d9', pick: (l) => l.population }], tip),
+  );
+  card.appendChild(
+    lineChart('Born / yr', log, [{ name: 'Born', color: '#6fd98a', pick: (l) => l.born }], tip),
+  );
+  card.appendChild(
+    lineChart('Died / yr', log, [{ name: 'Died', color: '#d96f6f', pick: (l) => l.died }], tip),
+  );
+  card.appendChild(
+    lineChart(
+      'Capital Wealth',
+      log,
+      [{ name: 'Capital Wealth', color: '#d9c46f', pick: (l) => l.capitalWealth }],
+      tip,
+    ),
+  );
+  card.appendChild(
+    lineChart(
+      'Wealth vs starvation %',
+      log,
+      [
+        { name: 'Wealth conc.', color: '#e6a06f', pick: (l) => l.wealthConcentration ?? 0 },
+        { name: 'Starvation', color: '#e0556f', pick: (l) => l.starvationIndex ?? 0 },
+      ],
+      tip,
+      pct,
+    ),
   );
 
   const again = document.createElement('button');

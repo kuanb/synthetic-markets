@@ -6,9 +6,12 @@
 //  - Once history exceeds 1000 years we plot ONLY the trailing 1000 years and hide older data
 //    (no horizontal scrollbar — it disrupted the overlay layout).
 //
+// A chart can overlay multiple series on a SHARED y-scale (e.g. wealth concentration and the
+// starvation index, both percentages) so two same-scale metrics can be compared directly.
+//
 // Each chart's label reports `now` (latest year), `avg10` (trailing 10-year mean) and `peak`
-// (all-time max over the full history) so the current position is legible at a glance. Hovering a chart
-// shows a crosshair + tooltip with the exact year and value under the cursor.
+// (all-time max over the full history). Multi-series charts show one colored chip per series.
+// Hovering a chart shows a crosshair + tooltip with the exact year and value(s) under the cursor.
 
 import type { YearLog } from '../world/state';
 import { formatNumber } from '../render/format';
@@ -18,19 +21,45 @@ const MAX_WINDOW = 1000;
 const CHART_H = 46;
 const TRAIL_AVG = 10; // trailing-average window (years)
 
-interface ChartDef {
-  label: string;
+interface Series {
+  name: string; // full name (legend / tooltip)
+  short: string; // compact name (stats chip)
   color: string;
   pick: (l: YearLog) => number;
 }
 
+interface ChartDef {
+  label: string;
+  series: Series[]; // 1+ overlaid lines sharing the y-scale
+  fmt?: (v: number) => string; // value formatter (default formatNumber)
+}
+
+const s = (name: string, short: string, color: string, pick: (l: YearLog) => number): Series => ({
+  name,
+  short,
+  color,
+  pick,
+});
+const pct = (v: number) => `${Math.round(v)}%`;
+
 const DEFS: ChartDef[] = [
-  { label: 'Population', color: '#6fd9d9', pick: (l) => l.population },
-  { label: 'Raw mined / yr', color: '#d9a86f', pick: (l) => l.rawMined },
-  { label: 'Food produced / yr', color: '#6fd98a', pick: (l) => l.food },
-  { label: 'Market goods / yr', color: '#d9c46f', pick: (l) => l.goods },
-  { label: 'Tech invested / yr', color: '#9a6fd9', pick: (l) => l.techInvested },
-  { label: 'Wealth concentration %', color: '#e6a06f', pick: (l) => l.wealthConcentration ?? 0 },
+  { label: 'Population', series: [s('Population', 'Population', '#6fd9d9', (l) => l.population)] },
+  { label: 'Raw mined / yr', series: [s('Raw mined', 'Raw', '#d9a86f', (l) => l.rawMined)] },
+  { label: 'Food produced / yr', series: [s('Food produced', 'Food', '#6fd98a', (l) => l.food)] },
+  { label: 'Market goods / yr', series: [s('Market goods', 'Goods', '#d9c46f', (l) => l.goods)] },
+  {
+    label: 'Tech invested / yr',
+    series: [s('Tech invested', 'Tech', '#9a6fd9', (l) => l.techInvested)],
+  },
+  {
+    // Two same-scale percentages overlaid: inequality vs the share of population lost to starvation.
+    label: 'Wealth conc. vs starvation %',
+    fmt: pct,
+    series: [
+      s('Wealth concentration', 'Wealth', '#e6a06f', (l) => l.wealthConcentration ?? 0),
+      s('Starvation index', 'Starv', '#e0556f', (l) => l.starvationIndex ?? 0),
+    ],
+  },
 ];
 
 const css = `
@@ -67,8 +96,7 @@ export function mountCharts(root: HTMLElement): { update(log: YearLog[]): void }
     log: YearLog[];
     start: number; // first visible log index
     pxPerYear: number;
-    windowMax: number; // max over the VISIBLE window (drives y-axis scaling)
-    allTimeMax: number; // max over the FULL history (drives the "peak" label)
+    windowMax: number; // max over the VISIBLE window across all series (drives y-axis scaling)
   }
 
   const charts: ChartEls[] = DEFS.map((def) => {
@@ -99,10 +127,9 @@ export function mountCharts(root: HTMLElement): { update(log: YearLog[]): void }
       start: 0,
       pxPerYear: 1,
       windowMax: 1,
-      allTimeMax: 1,
     };
 
-    // Hover -> crosshair + tooltip with the exact year/value under the cursor.
+    // Hover -> crosshair + tooltip with the exact year/value(s) under the cursor.
     const onMove = (ev: MouseEvent) => {
       const total = c.log.length;
       if (total === 0) {
@@ -114,9 +141,13 @@ export function mountCharts(root: HTMLElement): { update(log: YearLog[]): void }
       const visIdx = Math.round(localX / c.pxPerYear);
       const i = Math.max(c.start, Math.min(total - 1, c.start + visIdx));
       const entry = c.log[i];
-      const v = c.def.pick(entry);
+      const fmt = c.def.fmt ?? formatNumber;
       draw(c, i); // redraw with crosshair at i
-      tip.innerHTML = `${c.def.label} \u00b7 yr <b>${entry.year}</b><br/><b>${formatNumber(v)}</b>`;
+      let html = `yr <b>${entry.year}</b>`;
+      for (const sd of c.def.series) {
+        html += `<br/><span style="color:${sd.color}">${sd.name}</span> <b>${fmt(sd.pick(entry))}</b>`;
+      }
+      tip.innerHTML = html;
       tip.style.display = 'block';
       const tw = tip.offsetWidth;
       const th = tip.offsetHeight;
@@ -136,7 +167,7 @@ export function mountCharts(root: HTMLElement): { update(log: YearLog[]): void }
     return c;
   });
 
-  // Render one chart. With a hoverIdx, overlays a vertical crosshair + a dot at that data point.
+  // Render one chart. With a hoverIdx, overlays a vertical crosshair + a dot per series at that year.
   function draw(c: ChartEls, hoverIdx?: number): void {
     const log = c.log;
     const total = log.length;
@@ -155,47 +186,49 @@ export function mountCharts(root: HTMLElement): { update(log: YearLog[]): void }
     const span = Math.max(MIN_WINDOW, visibleCount);
     const pxPerYear = cssW / span;
 
-    // windowMax scales the visible line; allTimeMax (over ALL history) feeds the "peak" label.
+    // Shared y-scale: the max over the visible window across EVERY series on this chart.
     let windowMax = 1;
-    let allTimeMax = 1;
-    for (let i = 0; i < total; i++) {
-      const v = c.def.pick(log[i]);
-      if (v > allTimeMax) allTimeMax = v;
-      if (i >= start && v > windowMax) windowMax = v;
+    for (let i = start; i < total; i++) {
+      for (const sd of c.def.series) {
+        const v = sd.pick(log[i]);
+        if (v > windowMax) windowMax = v;
+      }
     }
 
     c.start = start;
     c.pxPerYear = pxPerYear;
     c.windowMax = windowMax;
-    c.allTimeMax = allTimeMax;
 
     const yOf = (v: number) => CHART_H - 3 - (v / windowMax) * (CHART_H - 10);
     const xOf = (i: number) => (i - start) * pxPerYear;
 
-    ctx.strokeStyle = c.def.color;
-    ctx.lineWidth = 1.25;
-    ctx.beginPath();
-    for (let i = start; i < total; i++) {
-      const x = xOf(i);
-      const y = yOf(c.def.pick(log[i]));
-      if (i === start) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
+    for (const sd of c.def.series) {
+      ctx.strokeStyle = sd.color;
+      ctx.lineWidth = 1.25;
+      ctx.beginPath();
+      for (let i = start; i < total; i++) {
+        const x = xOf(i);
+        const y = yOf(sd.pick(log[i]));
+        if (i === start) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
     }
-    ctx.stroke();
 
     if (hoverIdx !== undefined && hoverIdx >= start && hoverIdx < total) {
       const x = xOf(hoverIdx);
-      const y = yOf(c.def.pick(log[hoverIdx]));
       ctx.strokeStyle = 'rgba(255,255,255,0.28)';
       ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.moveTo(x + 0.5, 0);
       ctx.lineTo(x + 0.5, CHART_H);
       ctx.stroke();
-      ctx.fillStyle = c.def.color;
-      ctx.beginPath();
-      ctx.arc(x, y, 2.5, 0, Math.PI * 2);
-      ctx.fill();
+      for (const sd of c.def.series) {
+        ctx.fillStyle = sd.color;
+        ctx.beginPath();
+        ctx.arc(x, yOf(sd.pick(log[hoverIdx])), 2.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
     }
   }
 
@@ -206,14 +239,32 @@ export function mountCharts(root: HTMLElement): { update(log: YearLog[]): void }
       c.stats.innerHTML = '';
       return;
     }
-    const now = c.def.pick(log[total - 1]);
-    const n = Math.min(TRAIL_AVG, total);
-    let sum = 0;
-    for (let i = total - n; i < total; i++) sum += c.def.pick(log[i]);
-    const avg = sum / n;
-    c.stats.innerHTML =
-      `now <b>${formatNumber(now)}</b> \u00b7 avg10 <b>${formatNumber(avg)}</b> ` +
-      `\u00b7 peak <b>${formatNumber(c.allTimeMax)}</b>`;
+    const fmt = c.def.fmt ?? formatNumber;
+    if (c.def.series.length === 1) {
+      const sd = c.def.series[0];
+      const now = sd.pick(log[total - 1]);
+      const n = Math.min(TRAIL_AVG, total);
+      let sum = 0;
+      let peak = 0;
+      for (let i = 0; i < total; i++) {
+        const v = sd.pick(log[i]);
+        if (v > peak) peak = v;
+        if (i >= total - n) sum += v;
+      }
+      c.stats.innerHTML =
+        `now <b>${fmt(now)}</b> \u00b7 avg10 <b>${fmt(sum / n)}</b> ` +
+        `\u00b7 peak <b>${fmt(peak)}</b>`;
+      return;
+    }
+    // Multi-series: one colored chip per series (now + all-time peak) — the chips double as a legend.
+    c.stats.innerHTML = c.def.series
+      .map((sd) => {
+        const now = sd.pick(log[total - 1]);
+        let peak = 0;
+        for (let i = 0; i < total; i++) peak = Math.max(peak, sd.pick(log[i]));
+        return `<span style="color:${sd.color}">${sd.short} <b>${fmt(now)}</b>\u00b7pk <b>${fmt(peak)}</b></span>`;
+      })
+      .join(' \u00b7 ');
   }
 
   return {

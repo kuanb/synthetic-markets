@@ -142,6 +142,16 @@ describe('invariants over a run', () => {
     }
   });
 
+  it('starvation index is a bounded percentage (0..100) every logged year', () => {
+    const s = createWorld(99, W, H, OPTS);
+    const rng = makeRng(99);
+    for (let i = 0; i < 60; i++) tick(s, rng);
+    for (const yl of s.log) {
+      expect(yl.starvationIndex).toBeGreaterThanOrEqual(0);
+      expect(yl.starvationIndex).toBeLessThanOrEqual(100 + 1e-6);
+    }
+  });
+
   it('death floor: population <= floor(food) after a starving cycle (past safe window)', () => {
     const s = createWorld(5, W, H, OPTS);
     // advance past the early-game player safety window so full mortality applies

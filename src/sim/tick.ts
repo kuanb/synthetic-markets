@@ -126,6 +126,11 @@ export function tick(state: WorldState, rng: RNG): void {
     logEvent(state, 'tech', `Discovered ${techName(state.markets[0].techLevel)}`);
   }
   births(state, rngBirth); // 2 (single global pass)
+  // Snapshot the player's at-risk cohort right before food is allocated: this is everyone who must
+  // eat this year (prior survivors + births), i.e. the denominator of the Starvation index. The
+  // numerator is the rise in cumulative food deaths over the year (starvation kills only).
+  const starvePopBefore = state.markets[0].population;
+  const foodDeadBefore = state.markets[0].foodDeathsTotal;
   for (const m of state.markets) {
     const food = produce(state, m, deficitCells); // 3 + 4 (production + three-way raw disposition)
     accrueGoods(m); // 5
@@ -238,6 +243,9 @@ export function tick(state: WorldState, rng: RNG): void {
   // invoked by the worker around tickBatch.
 
   // Step 12: log player aggregate.
+  const foodDeathsThisYear = player.foodDeathsTotal - foodDeadBefore;
+  const starvationIndex =
+    starvePopBefore > 0 ? (foodDeathsThisYear / starvePopBefore) * 100 : 0;
   state.log.push({
     year: state.year,
     born: player.bornThisYear,
@@ -249,6 +257,7 @@ export function tick(state: WorldState, rng: RNG): void {
     capitalWealth: player.capitalWealth,
     population: player.population,
     wealthConcentration: logConc,
+    starvationIndex,
   });
 
   state.year++;

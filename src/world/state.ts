@@ -80,6 +80,9 @@ export interface YearLog {
   capitalWealth: number;
   population: number;
   wealthConcentration: number; // % of food capacity the densest decile of the population needs
+  // % of the year's at-risk population (survivors who fed + births + those who then starved) that
+  // died of starvation. Surfaces tech-/expansion-driven growth outrunning the food system.
+  starvationIndex: number;
 }
 
 // Player-facing "major historical events" feed. Derived data only (never affects sim RNG / state
