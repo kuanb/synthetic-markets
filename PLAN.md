@@ -657,6 +657,11 @@ Entering a cell sets `discovered = 1` and resolves by occupant (in `resolveMove`
 - **Unowned & empty** → cell `marketId` = mover's market; the person relocates there.
 - **Occupied only by wild persons** → cell joins the mover's market; the wild persons on it are
   **absorbed** (`setPersonOwner` to the mover's market). No conflict.
+- **Owned by another market but UNDEFENDED** (no persons of that market on the cell — e.g. it
+  collapsed/depopulated yet still nominally owns the cell) → taken like vacant land: re-owned by the
+  mover (banked `rawStock` travels with it), any wild squatters absorbed, person relocates. No
+  conflict. (This is what lets neighbours carve up a dead market's — or a collapsed player's —
+  empty territory with the slightest expansion drive.)
 - **Owned by another market & occupied by that market's persons** → conflict (§5.5). If conflict
   does **not** occur, the person does **not** enter; **the year is consumed** (stays at `from`).
 

@@ -36,6 +36,16 @@ function convertAll(s: WorldState, cell: number, marketId: number): void {
   for (let q = s.cellHead[cell]; q !== -1; q = s.personNext[q]) setPersonOwner(s, q, marketId);
 }
 
+// Does `marketId` still have any live person standing on `cell`? A market that collapsed keeps
+// nominal ownership of its cells (marketId set, 0 persons), so this distinguishes a DEFENDED cell
+// from vacant-but-owned territory.
+function cellDefendedBy(s: WorldState, cell: number, marketId: number): boolean {
+  for (let q = s.cellHead[cell]; q !== -1; q = s.personNext[q]) {
+    if (s.personOwner[q] === marketId) return true;
+  }
+  return false;
+}
+
 export function resolveMove(s: WorldState, intent: MoveIntent, rng: RNG): void {
   const { person: p, to } = intent;
   if (s.personCell[p] === -1) return; // died earlier this year
@@ -63,7 +73,19 @@ export function resolveMove(s: WorldState, intent: MoveIntent, rng: RNG): void {
     return;
   }
 
-  // Enemy-owned & occupied -> conflict gate.
+  // Enemy-owned but UNDEFENDED (no persons of that market on it — e.g. it collapsed/depopulated
+  // but still nominally owns the cell): take it like vacant land, no conflict roll. This lets any
+  // neighbouring market with the slightest expansion drive simply walk into a dead market's empty
+  // territory (and carve up the player's cells if the player collapses).
+  if (!cellDefendedBy(s, to, destMarket)) {
+    claim(s, to, mid);
+    absorbWild(s, to, mid);
+    movePerson(s, p, to);
+    revealForPlayer(s, owner, to);
+    return;
+  }
+
+  // Enemy-owned & DEFENDED -> conflict gate.
   const a = orientation(s.markets[mid]);
   const b = orientation(s.markets[destMarket]);
   const gap = Math.abs(a - b);
