@@ -296,27 +296,40 @@ stage.appendChild(pad);
 
 // zoom controls (map-view controls -> live on the map overlay, not the sidebar).
 // FOUR levels, inverted: 4x = most zoomed in (32px), 1x = most zoomed out (4px). Starts at 4x.
+// Segmented control (one connected track + a blue highlight that slides) — matches Years-per-turn.
+const zoomLevels: ZoomLevel[] = [1, 2, 3, 4];
+const zSegW = 100 / zoomLevels.length;
 const zoomWrap = document.createElement('div');
 zoomWrap.style.cssText =
-  'position:absolute;bottom:12px;right:12px;display:flex;gap:4px;opacity:.9;';
-const zoomButtons = new Map<ZoomLevel, HTMLButtonElement>();
+  'position:absolute;bottom:12px;right:12px;width:148px;display:flex;background:#0a0a0a;' +
+  'border:1px solid #2a2a2a;border-radius:4px;overflow:hidden;opacity:.9;';
+const zoomSlider = document.createElement('div');
+zoomSlider.style.cssText =
+  `position:absolute;top:0;bottom:0;left:0;width:${zSegW}%;background:#1d3a4d;` +
+  'border:1px solid #2f6e92;border-radius:3px;box-sizing:border-box;' +
+  'transition:left 0.18s ease;pointer-events:none;';
+zoomWrap.appendChild(zoomSlider);
+const zoomSegs: HTMLButtonElement[] = [];
 const paintZoom = () => {
-  for (const [z, b] of zoomButtons) {
-    b.style.background = z === viewport.zoom ? '#1d3a4d' : '#111';
-    b.style.borderColor = z === viewport.zoom ? '#2f6e92' : '#2a2a2a';
-  }
+  const idx = zoomLevels.indexOf(viewport.zoom);
+  if (idx >= 0) zoomSlider.style.left = `${idx * zSegW}%`;
+  zoomSegs.forEach((seg, i) => {
+    seg.style.color = zoomLevels[i] === viewport.zoom ? '#fff' : '#9aa';
+  });
 };
-([1, 2, 3, 4] as const).forEach((z) => {
-  const b = document.createElement('button');
-  b.textContent = `${z}\u00d7`;
-  b.style.cssText = `width:36px;height:36px;color:#ccc;border:1px solid #2a2a2a;border-radius:3px;font:inherit;cursor:pointer;`;
-  b.onclick = () => {
+zoomLevels.forEach((z) => {
+  const seg = document.createElement('button');
+  seg.textContent = `${z}\u00d7`;
+  seg.style.cssText =
+    'position:relative;z-index:1;flex:1;height:32px;background:none;border:none;' +
+    'color:#9aa;cursor:pointer;font:inherit;';
+  seg.onclick = () => {
     viewport = setZoom(viewport, z);
     paintZoom();
     redraw();
   };
-  zoomButtons.set(z, b);
-  zoomWrap.appendChild(b);
+  zoomSegs.push(seg);
+  zoomWrap.appendChild(seg);
 });
 paintZoom();
 stage.appendChild(zoomWrap);
