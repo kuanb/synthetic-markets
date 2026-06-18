@@ -72,7 +72,8 @@ export interface Market {
   socialStability: number; // [0,100]; recomputed each cycle, carried to the next
   techDisruption: number; // accumulated, geometrically-decaying tech-change shock
   techGainedThisCycle: number; // # tech levels unlocked this cycle (transient; feeds disruption shock)
-  laborEfficiency: number; // [0.25,1]; derived from stability, scales effective labor next cycle
+  laborEfficiency: number; // [0.25,1]; effective labor next cycle = instant(food/wealth) × adaptation
+  laborAdaptation: number; // [0.25,1]; SLOW tech-disruption absorption (down fast, up tech-scaled-slow)
   marketCoverage: number; // [0.5,1]; derived from stability, scales goods capture next cycle
 }
 
@@ -382,6 +383,7 @@ function makeMarket(id: number, isPlayer: boolean, propensityToExpand: number): 
     techDisruption: 0,
     techGainedThisCycle: 0,
     laborEfficiency: 1,
+    laborAdaptation: 1,
     marketCoverage: 1,
   };
 }
@@ -670,6 +672,7 @@ export function deserialize(p: SerializedState): WorldState {
       techDisruption: m.techDisruption ?? 0,
       techGainedThisCycle: m.techGainedThisCycle ?? 0,
       laborEfficiency: m.laborEfficiency ?? 1,
+      laborAdaptation: m.laborAdaptation ?? 1,
       marketCoverage: m.marketCoverage ?? 1,
       // back-compat for saves predating the famine-tolerance knob
       policy: { ...m.policy, famineTolerance: m.policy.famineTolerance ?? CONFIG.FAMINE_TOLERANCE_DEFAULT },

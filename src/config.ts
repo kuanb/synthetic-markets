@@ -111,9 +111,9 @@ export const CONFIG = {
   // accrues as capitalWealth (wealth explosion preserved) and steady production comfortably covers
   // consumption. < 1 ⇒ no goods-starvation under steady play; goods-death only on a real downturn.
   DESIRE_SUPPLY_FRAC: 0.5,
-  // Goods-shortfall deaths are capped to this fraction of population per year: a gradual decline
-  // (decadence), never an instant wipe. Food deaths are NOT capped (food is the hard constraint).
-  GOODS_DEATH_MAX_FRAC: 0.1,
+  // Goods-shortfall deaths are capped to this fraction of population per year. Food deaths are NOT
+  // capped (food is the hard constraint), so this only bounds the secondary goods-decadence channel.
+  GOODS_DEATH_MAX_FRAC: 0.5,
   // Soft ceiling only (rarely binds now that desire tracks throughput).
   DESIRE_CAP: 1_000_000,
   PROPENSITY_RISE: 0.15,
@@ -192,6 +192,19 @@ export const CONFIG = {
   STABILITY_TECH_SHOCK_PER_LEVEL: 2.2, // added disruption per tech LEVEL reached (era scaling)
   STABILITY_TECH_DECAY: 0.9, // disruption *= this each year (a big late shock now lingers ~2 decades)
   STABILITY_TECH_MAX_PENALTY: 90, // cap on the disruption penalty (late tech can nearly zero stability)
+  // Labor efficiency now EASES toward its stability-derived target instead of snapping each cycle, so
+  // a tech shock is a multi-DECADE productivity slowdown, not a one-year cliff (and recovery is what
+  // makes Forced Intervention worth it). Deterioration eases at a fixed rate; RECOVERY is slower and
+  // FASTER at higher tech — an advanced, highly-productive workforce ABSORBS the same disruption
+  // sooner. Tuned so full absorption (efficiency back to ~1) takes ~100 yr at tech 0 and ~50 yr at
+  // max tech. (The disruption shock/decay mechanism itself is unchanged — only the labor coupling.)
+  STABILITY_LABOR_EASE_DOWN: 0.65, // per-year slide DOWN toward the depressed target (fast, not instant)
+  // Per-year fraction of the tech-ADAPTATION gap recovered toward full. Only the tech term uses this
+  // (food/wealth recover instantly), so a slow low-tech rate is safe — it just stretches absorption.
+  // Cubic tech-scaling (see laborRecoverRate) concentrates the speed-up in the high-tech end where
+  // the big shocks land, so late tech absorbs its deep dip faster than mid tech absorbs a shallow one.
+  STABILITY_LABOR_RECOVER_LOWTECH: 0.01, // per-year climb at tech 0 (~100 yr absorb for a big shock)
+  STABILITY_LABOR_RECOVER_HIGHTECH: 0.09, // ...at max tech (~50 yr): efficient labor recovers fastest
   // Labor efficiency from stability: fraction of allocated labor that can be mobilised (strikes,
   // unrest, absenteeism, distrust...). Piecewise-linear over [stability, efficiency], clamped [.25,1].
   STABILITY_LABOR_ANCHORS: [

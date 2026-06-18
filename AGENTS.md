@@ -159,7 +159,13 @@ Reporting / state (all derived; persisted with the world):
   `STABILITY_TECH_SHOCK_BASE`/`_PER_LEVEL`, so late techs are social earthquakes — ×`STABILITY_TECH_DECAY`/yr).
   Stability is CARRIED to the next cycle where it drives `laborEfficiency ∈ [0.25,1]` (scales effective
   labor in `produce` → food/raw/research) and `marketCoverage ∈ [0.5,1]` (scales goods capture in
-  `accrueGoods`, WITHOUT removing territory). All pure/deterministic (no RNG). Mappings are
+  `accrueGoods`, WITHOUT removing territory). `laborEfficiency = instant(food+wealth) × laborAdaptation`:
+  the food/wealth part tracks current conditions every cycle (so a food dip self-corrects, no death
+  spiral), while `laborAdaptation` is a SLOW state var — a tech shock slides it DOWN fast
+  (`STABILITY_LABOR_EASE_DOWN`) then it climbs back toward full on its own tech-scaled clock
+  (`laborRecoverRate`, cubic: ~100 yr absorb early, ~50 yr late), turning each big tech into a
+  decades-long productivity slowdown that Forced Intervention (more land/food/labor) helps ride out.
+  All pure/deterministic (no RNG). Mappings are
   config anchor tables (`STABILITY_*_ANCHORS`); `socialStability` is in `YearLog` and is the top-left
   history chart (it replaced the wealth/starvation chart there). Future social-event hooks (food
   riots, intervention pressure) read `m.socialStability` in `stability.ts`.

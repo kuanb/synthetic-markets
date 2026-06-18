@@ -14,6 +14,7 @@
 
 import { CONFIG } from '../config';
 import { type Market, type WorldState, wealthConcentration } from '../world/state';
+import { maxTechLevel } from './tech';
 
 type Anchors = readonly (readonly [number, number])[];
 
@@ -86,6 +87,21 @@ export function marketCoverageOf(stability: number): number {
   return clamp(interp(CONFIG.STABILITY_COVERAGE_ANCHORS, stability), 0.5, 1);
 }
 
+// Per-year fraction of the remaining gap that labor efficiency RECOVERS each year, toward full.
+// Scales (convex) with tech level: a more advanced, more productive workforce re-mobilises faster,
+// so it can absorb its (much larger) late-game shock SOONER than an early society absorbs a small
+// one. Convex (f^2) so the speed-up is concentrated in the high-tech end. ~100 yr to full at tech 0,
+// ~50 yr at max tech (despite the deeper late dip). Recovery runs on its OWN clock, independent of
+// how fast the disruption score itself decays — that is the "society slowly adapts" slowdown.
+export function laborRecoverRate(techLevel: number): number {
+  const max = maxTechLevel();
+  const f = max > 0 ? clamp(techLevel / max, 0, 1) : 0;
+  return (
+    CONFIG.STABILITY_LABOR_RECOVER_LOWTECH +
+    (CONFIG.STABILITY_LABOR_RECOVER_HIGHTECH - CONFIG.STABILITY_LABOR_RECOVER_LOWTECH) * f * f * f
+  );
+}
+
 // Recompute a market's stability at the END of a cycle and derive labor efficiency + market coverage
 // for the NEXT cycle to consume. Tech-disruption decays first, then this cycle's shock (if a level was
 // gained) is injected, so the year a technology lands shows the full shock before it fades.
@@ -101,6 +117,22 @@ export function updateSocialStability(s: WorldState, m: Market): void {
   // Food stress uses the PRE-death cohort (m.foodPop): at carrying capacity, deaths cull population
   // down to ~floor(food), so post-death surplus is always ~0 and would mask the real food pressure.
   m.socialStability = computeStability(concentration, m.foodThisYear, m.foodPop, m.techDisruption);
-  m.laborEfficiency = laborEfficiencyOf(m.socialStability);
+
+  // Labor efficiency has two factors that combine multiplicatively:
+  //   1. INSTANT (food + wealth): tracks current conditions every cycle, recovering as fast as it
+  //      falls — so an ordinary food dip is self-correcting and never a death spiral.
+  //   2. SLOW tech ADAPTATION: a technology shock slides this DOWN fast (a real, deep dip → the big
+  //      pop drops), then it climbs back toward full on its own tech-scaled clock (an advanced
+  //      workforce re-mobilises faster). Decoupling the tech term from current conditions is what
+  //      stretches a shock into a decades-long slowdown — the window Forced Intervention is for.
+  const instant = laborEfficiencyOf(computeStability(concentration, m.foodThisYear, m.foodPop, 0));
+  const adaptTarget = laborEfficiencyOf(CONFIG.STABILITY_MAX - disruptionPenalty(m.techDisruption));
+  if (adaptTarget < m.laborAdaptation) {
+    m.laborAdaptation += CONFIG.STABILITY_LABOR_EASE_DOWN * (adaptTarget - m.laborAdaptation);
+  } else {
+    m.laborAdaptation += laborRecoverRate(m.techLevel) * (1 - m.laborAdaptation);
+  }
+  m.laborAdaptation = clamp(m.laborAdaptation, 0.25, 1);
+  m.laborEfficiency = clamp(instant * m.laborAdaptation, 0.25, 1);
   m.marketCoverage = marketCoverageOf(m.socialStability);
 }

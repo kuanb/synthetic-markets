@@ -1018,6 +1018,10 @@ this section reconciles them. (`AGENTS.md` carries the same list as the operatio
   `STABILITY_TECH_MAX_PENALTY`). Stability is CARRIED to the next
   cycle, deriving `laborEfficiency ∈ [0.25,1]` (scales effective labor in `produce` → food/raw/research)
   and `marketCoverage ∈ [0.5,1]` (scales goods capture in `accrueGoods`, WITHOUT removing territory).
+  `laborEfficiency = instant(food+wealth) × laborAdaptation`: food/wealth track current conditions
+  every cycle (a food dip self-corrects), while `laborAdaptation` is a SLOW state var — a tech shock
+  slides it down fast then it climbs back on a tech-scaled clock (`STABILITY_LABOR_RECOVER_*`, cubic:
+  ~100 yr early → ~50 yr late), so a major tech is a decades-long slowdown Forced Intervention helps ride out.
   All penalties/mappings are config anchor tables (`STABILITY_*_ANCHORS`). Pure & deterministic (no
   RNG). `socialStability` is in `YearLog` and is the top-left history chart (replaced the
   wealth/starvation chart there); the sidebar adds a "Society" group. Feedback loop:
