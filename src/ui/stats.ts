@@ -141,7 +141,11 @@ export function showSummary(root: HTMLElement, outcome: 'win' | 'loss', log: Yea
   overlay.style.cssText = `position:fixed;inset:0;background:rgba(0,0,0,0.92);z-index:50;
     display:flex;align-items:center;justify-content:center;padding:20px;overflow:auto;`;
   const card = document.createElement('div');
-  card.style.cssText = `max-width:480px;width:100%;border:1px solid #333;background:#080808;
+  // Cap the card BELOW the viewport (40px buffer top + bottom) and scroll internally, so a tall
+  // summary (six charts + stats) never bleeds past the screen edges. border-box keeps the padding
+  // inside the max-height budget.
+  card.style.cssText = `max-width:480px;width:100%;max-height:calc(100vh - 80px);overflow-y:auto;
+    box-sizing:border-box;border:1px solid #333;background:#080808;
     padding:24px;border-radius:6px;font-family:ui-monospace,monospace;color:#ccc;`;
   const win = outcome === 'win';
   card.innerHTML = `
