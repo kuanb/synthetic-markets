@@ -78,6 +78,7 @@ describe('balance smoke', () => {
       rawToReserveFrac: CONFIG.RAW_RESERVE_DEFAULT,
       forcedIntervention: false,
       famineTolerance: CONFIG.FAMINE_TOLERANCE_DEFAULT,
+      marketStimulus: false,
     });
     // Aggressive research: grow via natural crowding-driven expansion (don't over-scatter with
     // forced intervention), keep enough food labor to sustain population, and pour nearly all
@@ -89,6 +90,7 @@ describe('balance smoke', () => {
       rawToReserveFrac: 0.05,
       forcedIntervention: false,
       famineTolerance: CONFIG.FAMINE_TOLERANCE_DEFAULT,
+      marketStimulus: false,
     });
 
     /* eslint-disable no-console */
@@ -129,6 +131,7 @@ describe('balance smoke', () => {
       rawToReserveFrac: CONFIG.RAW_RESERVE_DEFAULT,
       forcedIntervention: false,
       famineTolerance: CONFIG.FAMINE_TOLERANCE_DEFAULT,
+      marketStimulus: false,
     };
 
     // The yearly economy is deterministic but CHAOTIC: at a single seed a tiny change in the
@@ -289,6 +292,7 @@ describe('famine tolerance', () => {
       rawToReserveFrac: 0.05,
       forcedIntervention: false,
       famineTolerance: t,
+      marketStimulus: false,
     });
     const foodDeaths = (seed: number, t: number): number => {
       const s = createWorld(seed, 60, 60, { wildCellDensity: 0.05, aiMarkets: 4 });

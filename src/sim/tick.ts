@@ -34,6 +34,8 @@ function resetAccumulators(m: Market): void {
   m.goodsConsumedThisCycle = 0;
   m.rawToMarketThisCycle = 0;
   m.rawToReserveThisCycle = 0;
+  m.stimulusCoverageThisCycle = 0;
+  m.stimulusSpentThisCycle = 0;
   m.foodPotentialThisCycle = 0;
   m.rawPotentialThisCycle = 0;
   m.bornThisYear = 0;
@@ -298,6 +300,7 @@ export function tickBatch(state: WorldState, rng: RNG, years: number): EndState 
     m.foodProducedThisTurn = 0;
     m.goodsNeededThisTurn = 0;
     m.goodsAvailableThisTurn = 0;
+    m.stimulusSpentThisTurn = 0;
   }
   for (let i = 0; i < years; i++) {
     tick(state, rng);

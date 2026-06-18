@@ -205,6 +205,18 @@ export const CONFIG = {
   // the big shocks land, so late tech absorbs its deep dip faster than mid tech absorbs a shallow one.
   STABILITY_LABOR_RECOVER_LOWTECH: 0.01, // per-year climb at tech 0 (~100 yr absorb for a big shock)
   STABILITY_LABOR_RECOVER_HIGHTECH: 0.09, // ...at max tech (~50 yr): efficient labor recovers fastest
+
+  // ---- Market Stimulus (goods → faster labor recovery) ----
+  // While a market is RECOVERING from a tech shock and the policy toggle is ON, it spends banked goods
+  // (capitalWealth) to flood the market — re-mobilising labor faster. A FULL stimulus this cycle costs
+  // STIMULUS_FULL_MULT × the cycle's goods PRODUCTION (a self-scaling, flow-based benchmark, so it
+  // tracks the economy instead of the runaway ext absolute). The fraction funded from the bank
+  // (coverage ∈ [0,1]) multiplies that cycle's labor-recovery rate by up to (1+STIMULUS_RECOVER_BONUS).
+  // Cost = your goods buffer: capitalWealth is also what staves off goods-deaths, so stimulating trades
+  // famine-insurance for a faster recovery. Bank wealth (raw→Market) to afford it across shocks.
+  STIMULUS_FULL_MULT: 1.5, // goods for a full stimulus = this × the cycle's goods production
+  STIMULUS_RECOVER_BONUS: 2.0, // full coverage multiplies labor-recovery speed by (1 + this)
+  MARKET_STIMULUS_DEFAULT: false, // player toggle default (off; a deliberate strategic lever)
   // Labor efficiency from stability: fraction of allocated labor that can be mobilised (strikes,
   // unrest, absenteeism, distrust...). Piecewise-linear over [stability, efficiency], clamped [.25,1].
   STABILITY_LABOR_ANCHORS: [

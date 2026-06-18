@@ -165,6 +165,12 @@ Reporting / state (all derived; persisted with the world):
   (`STABILITY_LABOR_EASE_DOWN`) then it climbs back toward full on its own tech-scaled clock
   (`laborRecoverRate`, cubic: ~100 yr absorb early, ~50 yr late), turning each big tech into a
   decades-long productivity slowdown that Forced Intervention (more land/food/labor) helps ride out.
+  **Market Stimulus** (`Policy.marketStimulus` toggle) counters that slowdown with GOODS: while a market
+  is recovering, `sim/economy.ts marketStimulus()` (called from the recovery branch of
+  `updateSocialStability`, so banked goods aren't wasted on the initial slide) spends `capitalWealth`
+  up to `STIMULUS_FULL_MULT × goodsProducedThisCycle`; the funded fraction (`stimulusCoverageThisCycle`
+  ∈ [0,1]) multiplies that cycle's `laborRecoverRate` by up to `(1+STIMULUS_RECOVER_BONUS)` (~3×). Cost
+  is your goods buffer (capitalWealth also staves off goods-deaths), so allocate raw→Market to fund it.
   All pure/deterministic (no RNG). Mappings are
   config anchor tables (`STABILITY_*_ANCHORS`); `socialStability` is in `YearLog` and is the top-left
   history chart (it replaced the wealth/starvation chart there). Future social-event hooks (food

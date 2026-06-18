@@ -769,7 +769,10 @@ const HELP_SECTIONS: Array<{ h: string; body: string }> = [
       'scaling food, mining and research alike) and <b>Market Coverage</b> (how much of your output ' +
       'the formal market captures, as activity slips informal \u2014 your territory is unaffected). ' +
       'So racing for growth and tech can quietly undermine the workforce that powers it: watch the ' +
-      '<b>Social stability</b> chart (top-left) and the <b>Society</b> stats in the sidebar.',
+      '<b>Social stability</b> chart (top-left) and the <b>Society</b> stats in the sidebar. ' +
+      '<b>Market Stimulus</b> (a policy toggle) fights back: while labor is recovering from a tech shock ' +
+      'it spends your banked <b>Capital Wealth</b> on the market to re-mobilise workers up to 3\u00d7 faster \u2014 ' +
+      'so banking goods (allocate more raw to <b>Market</b>) buys you a fast recovery when the next breakthrough lands.',
   },
   {
     h: 'Winning, losing &amp; insurrection',

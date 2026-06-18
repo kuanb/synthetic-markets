@@ -1022,6 +1022,9 @@ this section reconciles them. (`AGENTS.md` carries the same list as the operatio
   every cycle (a food dip self-corrects), while `laborAdaptation` is a SLOW state var — a tech shock
   slides it down fast then it climbs back on a tech-scaled clock (`STABILITY_LABOR_RECOVER_*`, cubic:
   ~100 yr early → ~50 yr late), so a major tech is a decades-long slowdown Forced Intervention helps ride out.
+  **Market Stimulus** (`Policy.marketStimulus`): while recovering, spend banked goods (capitalWealth, up to
+  `STIMULUS_FULL_MULT × goodsProducedThisCycle`) to multiply `laborRecoverRate` by up to `(1+STIMULUS_RECOVER_BONUS)`
+  (~3× faster) — goods buy back productivity; the cost is spending your goods-death buffer.
   All penalties/mappings are config anchor tables (`STABILITY_*_ANCHORS`). Pure & deterministic (no
   RNG). `socialStability` is in `YearLog` and is the top-left history chart (replaced the
   wealth/starvation chart there); the sidebar adds a "Society" group. Feedback loop:

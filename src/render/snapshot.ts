@@ -54,6 +54,9 @@ export interface MarketSummary {
   rawReserves: number; // persistent raw pool that funds the Forced-Intervention burst
   pendingBurst: boolean; // a queued burst awaiting sufficient reserves
   pendingBurstCost: number; // raw cost of the queued burst
+  // Market Stimulus (goods spent to speed labor recovery)
+  stimulusCoverageThisCycle: number; // [0,1] fraction of a full stimulus funded this cycle
+  stimulusSpentThisTurn: number; // goods spent on stimulus across the most recent End Turn batch
   // current policy (so the UI can reflect a loaded save)
   laborToFoodFrac: number;
   rawToMarketFrac: number;
@@ -61,6 +64,7 @@ export interface MarketSummary {
   rawToReserveFrac: number;
   forcedIntervention: boolean;
   famineTolerance: number;
+  marketStimulus: boolean;
 }
 
 // Lightweight summary of a market for the "largest markets" panel (player + discovered rivals).
@@ -179,12 +183,15 @@ export function buildSnapshot(s: WorldState): Snapshot {
     rawReserves: m.rawReserves,
     pendingBurst: m.pendingBurst,
     pendingBurstCost: m.pendingBurstCost,
+    stimulusCoverageThisCycle: m.stimulusCoverageThisCycle,
+    stimulusSpentThisTurn: m.stimulusSpentThisTurn,
     laborToFoodFrac: m.policy.laborToFoodFrac,
     rawToMarketFrac: m.policy.rawToMarketFrac,
     rawToTechFrac: m.policy.rawToTechFrac,
     rawToReserveFrac: m.policy.rawToReserveFrac,
     forcedIntervention: m.policy.forcedIntervention,
     famineTolerance: m.policy.famineTolerance,
+    marketStimulus: m.policy.marketStimulus,
   }));
 
   // Largest ALIVE markets: the player (always shown) + DISCOVERED rivals (fog-of-war respected).

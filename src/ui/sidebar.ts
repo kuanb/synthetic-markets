@@ -13,6 +13,7 @@ export interface PolicyInput {
   rawToReserveFrac: number;
   forcedIntervention: boolean;
   famineTolerance: number;
+  marketStimulus: boolean;
 }
 
 export interface SidebarCallbacks {
@@ -203,6 +204,7 @@ export function mountSidebar(
   let rawReserve: number = CONFIG.RAW_RESERVE_DEFAULT;
   let forced = false;
   let famine: number = CONFIG.FAMINE_TOLERANCE_DEFAULT;
+  let stimulus: boolean = CONFIG.MARKET_STIMULUS_DEFAULT;
 
   const emitPolicy = () =>
     cb.onPolicyChange({
@@ -212,6 +214,7 @@ export function mountSidebar(
       rawToReserveFrac: rawReserve,
       forcedIntervention: forced,
       famineTolerance: famine,
+      marketStimulus: stimulus,
     });
 
   // Labor: neutral, equal-weight (food vs mining), summing to 100%.
@@ -255,6 +258,22 @@ export function mountSidebar(
     emitPolicy();
   };
   polSec.appendChild(interv);
+
+  // Market Stimulus checkbox: spend banked goods to speed labor recovery after a tech shock.
+  const stim = el('label', 'sm-check');
+  const stimBox = el('input');
+  stimBox.type = 'checkbox';
+  const stimText = el('div');
+  const stimSub = el('div', 'sub');
+  stimText.appendChild(el('div', 't', 'Market Stimulus \u2014 Goods-Funded Recovery'));
+  stimText.appendChild(stimSub);
+  stim.appendChild(stimBox);
+  stim.appendChild(stimText);
+  stimBox.onchange = () => {
+    stimulus = stimBox.checked;
+    emitPolicy();
+  };
+  polSec.appendChild(stim);
 
   // Famine Tolerance: a single slider (not an alloc group). Subsistence (0) anchors people to
   // fed cells; Prospecting (1) lets them chase raw into starvation.
@@ -415,6 +434,15 @@ export function mountSidebar(
         ['Reserves', (s) => formatNumber(s.markets[0].rawReserves)],
         ['Goods / cycle', (s) => formatNumber(s.markets[0].goodsProduced)],
         [
+          'Stimulus / turn',
+          (s) =>
+            s.markets[0].stimulusSpentThisTurn > 0
+              ? `${formatNumber(s.markets[0].stimulusSpentThisTurn)} (${Math.round(
+                  s.markets[0].stimulusCoverageThisCycle * 100,
+                )}% cov)`
+              : '\u2014',
+        ],
+        [
           'Consumed / capita',
           (s) =>
             s.markets[0].population > 0
@@ -519,6 +547,7 @@ export function mountSidebar(
         rawReserve = p.rawToReserveFrac;
         forced = p.forcedIntervention;
         famine = p.famineTolerance;
+        stimulus = p.marketStimulus;
         laborGroup.set([laborFood, 1 - laborFood]);
         rawGroup.set([rawMarket, rawTech, rawReserve]);
         famineSlider.value = String(Math.round(famine * 100));
@@ -526,6 +555,17 @@ export function mountSidebar(
         syncedPolicy = true;
       }
       intervBox.checked = forced;
+      stimBox.checked = stimulus;
+      // Stimulus sub-text reflects whether labor is currently depressed (recovering) and the boost.
+      if (p.laborEfficiency < 0.999 || p.stimulusCoverageThisCycle > 0) {
+        const cov = Math.round(p.stimulusCoverageThisCycle * 100);
+        stimSub.textContent = `Recovering \u2014 stimulus at ${cov}% coverage (spent ${formatNumber(
+          p.stimulusSpentThisTurn,
+        )} goods this turn) speeds labor back to full.`;
+      } else {
+        stimSub.textContent =
+          'After a tech shock, spend banked goods (Capital Wealth) to re-mobilise labor up to 3\u00d7 faster. Idle while labor is at full.';
+      }
 
       // Explain the tech-burst behavior + show pending status vs current reserves.
       if (p.pendingBurst) {

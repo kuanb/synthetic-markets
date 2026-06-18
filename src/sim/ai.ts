@@ -19,6 +19,7 @@ export function runAiPolicy(s: WorldState, m: Market, rng: RNG): void {
 
   const expansionary = rng.next() < m.propensityToExpand;
   m.policy.laborToFoodFrac = foodFrac; // food-first; remainder available for mining
+  m.policy.marketStimulus = true; // AIs always cushion a tech slowdown with banked goods (cheap; only spends while recovering)
 
   // Three-way raw disposition. Expansionary AIs mine almost everything and push it to market
   // (wealth + conflict strength); steady AIs mine moderately, invest a little in tech, and bank

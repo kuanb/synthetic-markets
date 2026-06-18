@@ -284,6 +284,7 @@ describe('determinism + batch equivalence', () => {
       rawToReserveFrac: 0.2,
       forcedIntervention: true,
       famineTolerance: 0.3,
+      marketStimulus: false,
     };
     const a = createWorld(4242, W, H, OPTS);
     const b = createWorld(4242, W, H, OPTS);

@@ -15,6 +15,7 @@
 import { CONFIG } from '../config';
 import { type Market, type WorldState, wealthConcentration } from '../world/state';
 import { maxTechLevel } from './tech';
+import { marketStimulus } from './economy';
 
 type Anchors = readonly (readonly [number, number])[];
 
@@ -130,7 +131,13 @@ export function updateSocialStability(s: WorldState, m: Market): void {
   if (adaptTarget < m.laborAdaptation) {
     m.laborAdaptation += CONFIG.STABILITY_LABOR_EASE_DOWN * (adaptTarget - m.laborAdaptation);
   } else {
-    m.laborAdaptation += laborRecoverRate(m.techLevel) * (1 - m.laborAdaptation);
+    // RECOVERING. Spend banked goods as Market Stimulus (only here, so capital isn't wasted on the
+    // initial slide): the coverage funded this cycle (∈ [0,1]) multiplies the tech-scaled recovery
+    // rate by up to (1 + STIMULUS_RECOVER_BONUS). Capped at 1 so labor never overshoots full.
+    marketStimulus(m);
+    const boost = 1 + CONFIG.STIMULUS_RECOVER_BONUS * m.stimulusCoverageThisCycle;
+    const rate = Math.min(1, laborRecoverRate(m.techLevel) * boost);
+    m.laborAdaptation += rate * (1 - m.laborAdaptation);
   }
   m.laborAdaptation = clamp(m.laborAdaptation, 0.25, 1);
   m.laborEfficiency = clamp(instant * m.laborAdaptation, 0.25, 1);

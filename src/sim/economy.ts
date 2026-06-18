@@ -170,6 +170,28 @@ export function burstSpend(s: WorldState, m: Market): boolean {
   return true;
 }
 
+// Market Stimulus: spend banked goods (capitalWealth) to flood the market and re-mobilise labor
+// faster. Called from sim/stability.ts ONLY while a market is RECOVERING from a tech shock (so the
+// banked goods aren't wasted during the initial slide). Funding a FULL per-capita stimulus costs
+// STIMULUS_GOODS_PER_PERSON × ext(level) goods/person; the fraction actually funded this cycle
+// (coverage ∈ [0,1]) is stored on the market and multiplies that cycle's labor-recovery rate.
+// This is what makes goods strategically vital — bank wealth (raw→market) to buy back productivity.
+// Pure/deterministic (no RNG).
+export function marketStimulus(m: Market): void {
+  if (!m.policy.marketStimulus) return;
+  if (m.population <= 0 || m.capitalWealth <= 0) return;
+  // Full stimulus costs a multiple of THIS cycle's goods production (flow-based, so it scales with
+  // the economy and the player's raw→Market allocation, not the runaway ext absolute). Producing no
+  // goods (raw→Market = 0) ⇒ nothing to stimulate with.
+  const fullCost = m.goodsProducedThisCycle * CONFIG.STIMULUS_FULL_MULT;
+  if (fullCost <= 0) return;
+  const spend = Math.min(m.capitalWealth, fullCost);
+  m.capitalWealth -= spend;
+  m.stimulusSpentThisCycle = spend;
+  m.stimulusSpentThisTurn += spend;
+  m.stimulusCoverageThisCycle = spend / fullCost; // [0,1]
+}
+
 // Step 8: desire eases toward a fraction of per-capita goods THROUGHPUT (flow), not accumulated
 // capital (stock). Tying aspiration to what the economy actually produces stops desire from
 // ratcheting up off a hoarded capital pile and then mass-starving the market. With
