@@ -507,7 +507,8 @@ chronicleList.style.cssText = 'flex:1 1 auto;min-height:0;overflow-y:auto;paddin
 chronicleWrap.appendChild(chronicleList);
 stage.appendChild(chronicleWrap);
 
-// ---- Settings (gear, top-right corner) -> modal: world-gen params + About ----
+// ---- Settings (gear, top-right corner) -> modal: world-gen params + debug export ----
+// ABOUT_PARAGRAPHS are rendered in the How-to-Play modal (openHelp), after the guide sections.
 const ABOUT_PARAGRAPHS: string[] = [
   'This game started as an experiment inspired by economic historian Karl Polanyi and a simple question:',
   'Do markets emerge naturally, or are they built and maintained through rules, institutions, and intervention?',
@@ -668,25 +669,6 @@ function openSettings(): void {
   };
   card.appendChild(newGameBtn);
 
-  // ---- About Game ----
-  const hr = document.createElement('div');
-  hr.style.cssText = 'border-top:1px solid #1c1c1c;margin:16px 0 12px;';
-  card.appendChild(hr);
-  const aboutH = document.createElement('div');
-  aboutH.textContent = 'ABOUT GAME';
-  aboutH.style.cssText = 'font-size:13px;font-weight:600;letter-spacing:.1em;margin-bottom:8px;';
-  card.appendChild(aboutH);
-  const aboutQ = document.createElement('div');
-  aboutQ.textContent = 'Why did I make this?';
-  aboutQ.style.cssText = 'color:#cdd6e0;font-weight:600;margin-bottom:8px;';
-  card.appendChild(aboutQ);
-  for (const para of ABOUT_PARAGRAPHS) {
-    const p = document.createElement('div');
-    p.textContent = para;
-    p.style.cssText = 'color:#aeb8c2;margin-bottom:10px;';
-    card.appendChild(p);
-  }
-
   // ---- Debug log export (unrelated to new-game settings; lives at the very bottom) ----
   const dlHr = document.createElement('div');
   dlHr.style.cssText = 'border-top:1px solid #1c1c1c;margin:16px 0 12px;';
@@ -780,7 +762,9 @@ const HELP_SECTIONS: Array<{ h: string; body: string }> = [
       'concentrates</b>, <b>food security weakens</b>, or <b>technology changes faster than people ' +
       'can adapt</b> (each new tech is a shock that fades over time \u2014 and <b>later, era-defining ' +
       'technologies hit far harder than early ones</b>, so a major breakthrough can throw society into ' +
-      'years of upheaval). Low stability has ' +
+      'a <b>decades-long productivity slowdown</b> with a sharp population drop. The more advanced you ' +
+      'are, the faster labor re-mobilises \u2014 and <b>Forced Intervention</b> (fresh land, food and ' +
+      'labor) is the fastest way to ride one out. Low stability has ' +
       'teeth: it cuts <b>Labor Efficiency</b> (how much of your workforce actually shows up \u2014 ' +
       'scaling food, mining and research alike) and <b>Market Coverage</b> (how much of your output ' +
       'the formal market captures, as activity slips informal \u2014 your territory is unaffected). ' +
@@ -848,6 +832,26 @@ function openHelp(): void {
     const p = document.createElement('div');
     p.innerHTML = sec.body;
     p.style.cssText = 'color:#bcc6d0;margin-bottom:4px;';
+    card.appendChild(p);
+  }
+
+  // ---- About Game (moved here from Settings; sits after the How-to-Play sections) ----
+  const aboutHr = document.createElement('div');
+  aboutHr.style.cssText = 'border-top:1px solid #1c1c1c;margin:18px 0 12px;';
+  card.appendChild(aboutHr);
+  const aboutH = document.createElement('div');
+  aboutH.textContent = 'ABOUT GAME';
+  aboutH.style.cssText =
+    'color:#9ab;font-size:11px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;margin-bottom:6px;';
+  card.appendChild(aboutH);
+  const aboutQ = document.createElement('div');
+  aboutQ.textContent = 'Why did I make this?';
+  aboutQ.style.cssText = 'color:#cdd6e0;font-weight:600;margin-bottom:8px;';
+  card.appendChild(aboutQ);
+  for (const para of ABOUT_PARAGRAPHS) {
+    const p = document.createElement('div');
+    p.textContent = para;
+    p.style.cssText = 'color:#aeb8c2;margin-bottom:10px;';
     card.appendChild(p);
   }
 
