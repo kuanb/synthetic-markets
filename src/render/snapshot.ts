@@ -42,6 +42,10 @@ export interface MarketSummary {
   goodsDeathsTotal: number;
   orientation: number;
   wealthConcentration: number; // % of food capacity the densest decile of the population needs
+  // Social Stability system (see sim/stability.ts)
+  socialStability: number; // [0,100]
+  laborEfficiency: number; // [0.25,1] effective fraction of labor mobilised next cycle
+  marketCoverage: number; // [0.5,1] formal-market goods capture next cycle
   // yield efficiency (this cycle): captured vs full land potential over owned cells
   foodPotential: number;
   foodCaptured: number;
@@ -165,6 +169,9 @@ export function buildSnapshot(s: WorldState): Snapshot {
     goodsDeathsTotal: m.goodsDeathsTotal,
     orientation: orientation(m),
     wealthConcentration: wealthConcentration(s, m),
+    socialStability: m.socialStability,
+    laborEfficiency: m.laborEfficiency,
+    marketCoverage: m.marketCoverage,
     foodPotential: m.foodPotentialThisCycle,
     foodCaptured: m.foodThisYear,
     rawPotential: m.rawPotentialThisCycle,

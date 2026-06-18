@@ -20,6 +20,7 @@ import {
   updateDesire,
 } from './economy';
 import { births, moveIntents, updatePropensity } from './agents';
+import { updateSocialStability } from './stability';
 import { resolveMove } from './conflict';
 import { runAiPolicy } from './ai';
 import { fireBurst } from './burst';
@@ -40,6 +41,8 @@ function resetAccumulators(m: Market): void {
   m.foodThisYear = 0;
   m.rawMinedThisYear = 0;
   m.techInvestedThisYear = 0;
+  m.techGainedThisCycle = 0;
+  m.foodPop = 0;
 }
 
 // The top-k largest DISCOVERED + ALIVE rival markets (id + current population), for the rival-
@@ -90,6 +93,7 @@ function techUnlock(s: WorldState, m: Market): void {
   if (m.techProgress >= researchCost(m.techLevel + 1)) {
     m.techProgress -= researchCost(m.techLevel + 1);
     m.techLevel++;
+    m.techGainedThisCycle++; // rapid tech change injects a social-disruption shock (see stability.ts)
     if (m.isPlayer && m.techLevel >= max && s.finalTechYear < 0) {
       s.finalTechYear = s.year;
     }
@@ -196,6 +200,11 @@ export function tick(state: WorldState, rng: RNG): void {
   // Step 10: propensity.
   updatePropensity(state, deficitCells);
 
+  // Step 10.5: recompute Social Stability for every market from this cycle's outcome (wealth
+  // concentration, food surplus, decaying tech-disruption). Carried to the NEXT cycle, where it
+  // scales effective labor + market coverage (see sim/stability.ts and sim/economy.ts).
+  for (const m of state.markets) updateSocialStability(state, m);
+
   // Insurrection (player only, per year): when Wealth Concentration is high, the market risks
   // collapse. Warning cards on each upward crossing of a WARN_STEP boundary; an insurrection roll
   // (prob interpolated from THRESHOLD->100%) contracts the market toward its top population centers.
@@ -258,6 +267,7 @@ export function tick(state: WorldState, rng: RNG): void {
     population: player.population,
     wealthConcentration: logConc,
     starvationIndex,
+    socialStability: player.socialStability,
   });
 
   state.year++;

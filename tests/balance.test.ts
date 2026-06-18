@@ -297,6 +297,11 @@ describe('famine tolerance', () => {
       for (let y = 0; y < YRS; y++) {
         tick(s, rng);
         const p = s.markets[0];
+        // Isolate the famine MOVEMENT-damping mechanic from the (separately tested) Social Stability
+        // labor coupling: pin the player at full labor/coverage so the only difference between t=0 and
+        // t=1 is anchoring, not stability-driven food output. (Stability has its own unit tests.)
+        p.laborEfficiency = 1;
+        p.marketCoverage = 1;
         if (p.population <= 0 || p.cells.size === 0) break;
       }
       return s.markets[0].foodDeathsTotal;

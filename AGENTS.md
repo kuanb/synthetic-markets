@@ -74,6 +74,7 @@ src/
     agents.ts          births, per-person movement target selection (+ food-surplus move damping), propensity updates
     conflict.ts        movement resolution: fog reveal, wild absorption, market-vs-market conflict
     ai.ts              fixed-policy controller for non-player markets
+    stability.ts       Social Stability model: penalties -> stability -> labor efficiency + market coverage
     burst.ts           Forced-Intervention territory burst geometry (arm + terminus blob); tech-gated annexation
     tick.ts            THE SPINE: tick() resolves one year in §5.3 order; tickBatch(); captureTurnStart()/logTurnEvents() (per-turn events) + win/loss
   render/
@@ -149,6 +150,18 @@ Reporting / state (all derived; persisted with the world):
   and shedding the periphery (its people lost; survivors risk a food-driven follow-on collapse).
   Warning cards on each `INSURRECTION_WARN_STEP` crossing from `INSURRECTION_WARN_FROM` (55%). Events:
   `warning`, `insurrection` (both also pop a transient alert card).
+- **Social Stability + Labor Efficiency** (`sim/stability.ts`, Polanyi "double movement" scaffold):
+  every market gets a `socialStability ∈ [0,100]` recomputed at the END of each cycle as
+  `100 − wealthPenalty − foodStressPenalty − disruptionPenalty` (clamped). Inputs reuse existing
+  metrics: the Top-10% `wealthConcentration`, a food-stress ramp on the per-capita surplus of the
+  PRE-death cohort (`Market.foodPop`), and a decaying tech-disruption accumulator
+  (`Market.techDisruption`, +`STABILITY_TECH_SHOCK` per level gained, ×`STABILITY_TECH_DECAY`/yr).
+  Stability is CARRIED to the next cycle where it drives `laborEfficiency ∈ [0.25,1]` (scales effective
+  labor in `produce` → food/raw/research) and `marketCoverage ∈ [0.5,1]` (scales goods capture in
+  `accrueGoods`, WITHOUT removing territory). All pure/deterministic (no RNG). Mappings are
+  config anchor tables (`STABILITY_*_ANCHORS`); `socialStability` is in `YearLog` and is the top-left
+  history chart (it replaced the wealth/starvation chart there). Future social-event hooks (food
+  riots, intervention pressure) read `m.socialStability` in `stability.ts`.
 - **Yield efficiency**: per-cycle `foodPotentialThisCycle` / `rawPotentialThisCycle` accumulators
   expose captured-vs-potential food/raw in the sidebar.
 - **Snapshot ships more than markets[0]**: also `log` (full `YearLog[]` incl. `rawMined`,

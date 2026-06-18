@@ -11,6 +11,13 @@ import {
 } from '../src/world/state';
 import { tick, tickBatch } from '../src/sim/tick';
 import { ext, researchCost, maxTechLevel } from '../src/sim/tech';
+import {
+  wealthPenalty,
+  foodStressPenalty,
+  computeStability,
+  laborEfficiencyOf,
+  marketCoverageOf,
+} from '../src/sim/stability';
 import { formatNumber, formatCell } from '../src/render/format';
 
 const W = 60;
@@ -152,6 +159,23 @@ describe('invariants over a run', () => {
     }
   });
 
+  it('social stability / labor efficiency / market coverage stay in range every market every tick', () => {
+    const s = createWorld(99, W, H, OPTS);
+    const rng = makeRng(99);
+    for (let i = 0; i < 80; i++) {
+      tick(s, rng);
+      for (const m of s.markets) {
+        expect(m.socialStability).toBeGreaterThanOrEqual(0);
+        expect(m.socialStability).toBeLessThanOrEqual(100);
+        expect(m.laborEfficiency).toBeGreaterThanOrEqual(0.25 - 1e-9);
+        expect(m.laborEfficiency).toBeLessThanOrEqual(1 + 1e-9);
+        expect(m.marketCoverage).toBeGreaterThanOrEqual(0.5 - 1e-9);
+        expect(m.marketCoverage).toBeLessThanOrEqual(1 + 1e-9);
+        expect(m.techDisruption).toBeGreaterThanOrEqual(0);
+      }
+    }
+  });
+
   it('death floor: population <= floor(food) after a starving cycle (past safe window)', () => {
     const s = createWorld(5, W, H, OPTS);
     // advance past the early-game player safety window so full mortality applies
@@ -173,6 +197,41 @@ describe('invariants over a run', () => {
     const half = Math.floor(CONFIG.PLAYER_SAFE_YEARS / 2);
     for (let i = 0; i < half; i++) tick(s, rng);
     expect(s.markets[0].population).toBeGreaterThan(0);
+  });
+});
+
+describe('social stability model (pure functions)', () => {
+  it('wealth penalty matches the spec anchors and is monotonic/nonlinear', () => {
+    expect(wealthPenalty(20)).toBeCloseTo(0);
+    expect(wealthPenalty(30)).toBeCloseTo(5);
+    expect(wealthPenalty(50)).toBeCloseTo(20);
+    expect(wealthPenalty(70)).toBeCloseTo(50);
+    // increasingly severe: the 50->70 jump exceeds the 20->40 jump
+    expect(wealthPenalty(70) - wealthPenalty(50)).toBeGreaterThan(wealthPenalty(40) - wealthPenalty(20));
+  });
+
+  it('food stress: none at healthy surplus, maxed at crisis', () => {
+    expect(foodStressPenalty(2 * 100, 100)).toBe(0); // 100% surplus
+    expect(foodStressPenalty(0, 100)).toBe(CONFIG.STABILITY_FOOD_MAX_PENALTY); // total shortfall
+    expect(foodStressPenalty(10, 0)).toBe(0); // no population -> no stress
+  });
+
+  it('stability is clamped to [0,100] and healthy inputs give 100', () => {
+    expect(computeStability(10, 200, 100, 0)).toBe(100);
+    expect(computeStability(100, 0, 100, 999)).toBeGreaterThanOrEqual(0);
+    expect(computeStability(100, 0, 100, 999)).toBeLessThanOrEqual(100);
+  });
+
+  it('labor efficiency + market coverage follow the stability mapping', () => {
+    expect(laborEfficiencyOf(85)).toBeCloseTo(1.0);
+    expect(laborEfficiencyOf(60)).toBeCloseTo(0.9);
+    expect(laborEfficiencyOf(0)).toBeCloseTo(0.25);
+    expect(marketCoverageOf(85)).toBeCloseTo(1.0);
+    expect(marketCoverageOf(40)).toBeCloseTo(0.85);
+    expect(marketCoverageOf(0)).toBeCloseTo(0.5);
+    // lower stability never raises efficiency/coverage
+    expect(laborEfficiencyOf(20)).toBeLessThan(laborEfficiencyOf(80));
+    expect(marketCoverageOf(20)).toBeLessThan(marketCoverageOf(80));
   });
 });
 

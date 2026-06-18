@@ -38,6 +38,13 @@ fixed deterministic order.
 - People consume goods **automatically** from the capital pool; there is no goods-to-people slider.
   Your "growth vs. restraint" posture is emergent, captured by `orientation`, which drives conflict.
 
+**Social Stability** (0–100) is the headline social metric (top-left history chart + sidebar "Society"
+group). Rapid technological change, wealth concentration and food insecurity all erode it; in turn,
+low stability strands part of the workforce (**Labor Efficiency**, 0.25–1, scaling all labor: food,
+raw, research) and shrinks **Market Coverage** (0.5–1, how much output the formal market captures —
+territory is unaffected). The tension is deliberate: maximizing growth/tech tends to destabilize the
+society that sustains the market, so chasing any single metric backfires.
+
 **View modes** (top-center map overlay): Population/Markets, Food yield, Raw materials. Pan with
 arrow keys (or the on-screen pad); four zoom levels. Map overlays also show live **History**
 mini-charts and a **5 largest markets** panel (you + discovered rivals, top-left) and a **Chronicle** of major events
@@ -63,7 +70,7 @@ once per turn.
 src/
   config.ts            all tunable constants + the 46-entry tech table
   world/   rng, terrain (seeded noise), state (Land SoA + Person pool + worldgen + events)
-  sim/     tech, economy, agents, conflict, ai, burst (territory burst), tick (the spine)
+  sim/     tech, economy, agents, conflict, ai, stability (Social Stability), burst, tick (the spine)
   render/  format, snapshot, viewport, canvas
   ui/      sidebar, charts (History mini-charts), stats (end-game summary)
   worker/  protocol, simWorker (owns authoritative state + RNG)

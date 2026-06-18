@@ -230,6 +230,15 @@ export function showSummary(root: HTMLElement, outcome: 'win' | 'loss', log: Yea
       pct,
     ),
   );
+  card.appendChild(
+    lineChart(
+      'Social stability',
+      log,
+      [{ name: 'Social stability', color: '#6fd99a', pick: (l) => l.socialStability ?? 100 }],
+      tip,
+      (v) => `${Math.round(v)}`,
+    ),
+  );
 
   const again = document.createElement('button');
   again.textContent = 'New World';

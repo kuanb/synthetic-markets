@@ -40,8 +40,6 @@ const s = (name: string, short: string, color: string, pick: (l: YearLog) => num
   color,
   pick,
 });
-const pct = (v: number) => `${Math.round(v)}%`;
-
 const DEFS: ChartDef[] = [
   { label: 'Population', series: [s('Population', 'Population', '#6fd9d9', (l) => l.population)] },
   { label: 'Raw mined / yr', series: [s('Raw mined', 'Raw', '#d9a86f', (l) => l.rawMined)] },
@@ -52,13 +50,11 @@ const DEFS: ChartDef[] = [
     series: [s('Tech invested', 'Tech', '#9a6fd9', (l) => l.techInvested)],
   },
   {
-    // Two same-scale percentages overlaid: inequality vs the share of population lost to starvation.
-    label: 'Wealth conc. vs starvation %',
-    fmt: pct,
-    series: [
-      s('Wealth concentration', 'Wealth', '#e6a06f', (l) => l.wealthConcentration ?? 0),
-      s('Starvation index', 'Starv', '#e0556f', (l) => l.starvationIndex ?? 0),
-    ],
+    // Social Stability (0..100): the new composite of wealth concentration, food insecurity and
+    // tech disruption that drives labor efficiency + market coverage (see sim/stability.ts).
+    label: 'Social stability',
+    fmt: (v) => `${Math.round(v)}`,
+    series: [s('Social stability', 'Stability', '#6fd99a', (l) => l.socialStability ?? 100)],
   },
 ];
 

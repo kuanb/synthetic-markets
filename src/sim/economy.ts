@@ -65,7 +65,10 @@ export function produce(s: WorldState, m: Market, deficitCells: Set<number>): nu
     // Computed before the labor skip and before rawStock is decremented below.
     m.foodPotentialThisCycle += s.foodYield[cell] * fe;
     m.rawPotentialThisCycle += s.rawYield[cell] + s.rawStock[cell];
-    const labor = cellLabor(s, cell, m.id);
+    // Social instability strands part of the labor pool (strikes, unrest, absenteeism): only
+    // laborEfficiency of the cell's people can be effectively mobilised. Hits food, mining and
+    // (via mined raw -> research) tech alike. laborEfficiency is carried from last cycle's stability.
+    const labor = cellLabor(s, cell, m.id) * m.laborEfficiency;
     if (labor <= 0) continue;
     const laborToFood = labor * m.policy.laborToFoodFrac;
     const laborToRaw = labor - laborToFood; // mining capacity this cycle
@@ -92,15 +95,18 @@ export function produce(s: WorldState, m: Market, deficitCells: Set<number>): nu
   return totalFood;
 }
 
-// Step 5: all market-allocated raw becomes goods (tech-scaled) and enters the capital pool.
+// Step 5: market-allocated raw becomes goods (tech-scaled) and enters the capital pool. Low Social
+// Stability shrinks marketCoverage — the formal market is less embedded, so a smaller share of the
+// raw is captured as goods (the rest leaks into informal activity). Territory is unaffected.
 export function accrueGoods(m: Market): void {
-  m.goodsProducedThisCycle = m.rawToMarketThisCycle * ext(m.techLevel);
+  m.goodsProducedThisCycle = m.rawToMarketThisCycle * ext(m.techLevel) * m.marketCoverage;
   m.capitalWealth += m.goodsProducedThisCycle;
 }
 
 // Step 6: starvation (food is the PRIMARY constraint). Population must end <= floor(food).
 export function foodDeaths(s: WorldState, m: Market, food: number, rng: RNG): void {
   const pop = m.population;
+  m.foodPop = pop; // cohort facing the food constraint this cycle (drives Social Stability food stress)
   m.foodNeededThisTurn += pop; // each living person needs 1 food/cycle
   m.foodProducedThisTurn += food;
   const target = Math.floor(food);

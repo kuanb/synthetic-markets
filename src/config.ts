@@ -158,6 +158,58 @@ export const CONFIG = {
   INSURRECTION_WARN_FROM: 55, // first warning threshold (%)
   INSURRECTION_WARN_STEP: 5, // warn each +N% from WARN_FROM up to the insurrection threshold
 
+  // ---- Social Stability + Labor Efficiency (Polanyi "double movement" scaffolding) ----
+  // Each cycle every market gets a Social Stability score in [0,100], modelling its capacity to keep
+  // participating in the market system (NOT morality/happiness). It is recomputed at the END of a
+  // cycle from three penalties and CARRIED to the next cycle, where it scales effective labor and
+  // market coverage:
+  //   stability = STABILITY_MAX - wealthPenalty - foodStressPenalty - disruptionPenalty  (clamp 0..100)
+  // The feedback loop: tech/expansion -> concentration + disruption -> lower stability -> less
+  // effective labor + market coverage -> weaker output -> pressure to intervene -> restored stability.
+  STABILITY_MAX: 100,
+  // Wealth-concentration penalty: piecewise-linear over [top-10% wealth share %, penalty], increasingly
+  // severe at the extremes; extrapolated past the last anchor. (Uses the existing Top-10% metric.)
+  STABILITY_WEALTH_ANCHORS: [
+    [20, 0],
+    [30, 5],
+    [40, 10],
+    [50, 20],
+    [60, 35],
+    [70, 50],
+    [100, 95],
+  ],
+  // Food stress: penalty ramps up as the per-capita food surplus ratio (food/pop - 1) falls from
+  // SAFE (no stress) to CRISIS (full stress). Insecurity, not literal starvation, drives instability.
+  STABILITY_FOOD_SAFE_SURPLUS: 0.0, // surplus ratio at/above which there is no food stress (self-fed)
+  STABILITY_FOOD_CRISIS_SURPLUS: -0.25, // surplus ratio at/below which food stress is maxed (deficit)
+  STABILITY_FOOD_MAX_PENALTY: 35,
+  // Technology disruption: each tech level gained injects a shock that decays geometrically each year
+  // (society needs time to adapt). The disruption penalty is capped so a tech sprint alone can't zero
+  // stability. The decay/shock are applied per simulated year inside the stability update.
+  STABILITY_TECH_SHOCK: 15, // disruption added per tech level unlocked
+  STABILITY_TECH_DECAY: 0.85, // disruption *= this each year (≈ a decade to fade a single shock)
+  STABILITY_TECH_MAX_PENALTY: 50, // cap on the disruption penalty
+  // Labor efficiency from stability: fraction of allocated labor that can be mobilised (strikes,
+  // unrest, absenteeism, distrust...). Piecewise-linear over [stability, efficiency], clamped [.25,1].
+  STABILITY_LABOR_ANCHORS: [
+    [0, 0.25],
+    [20, 0.5],
+    [40, 0.75],
+    [60, 0.9],
+    [80, 1.0],
+    [100, 1.0],
+  ],
+  // Market coverage from stability: how embedded the formal market is (output captured as goods).
+  // Low stability shrinks coverage (informal activity) WITHOUT removing territory. Clamped [.5,1].
+  STABILITY_COVERAGE_ANCHORS: [
+    [0, 0.5],
+    [20, 0.7],
+    [40, 0.85],
+    [60, 0.95],
+    [80, 1.0],
+    [100, 1.0],
+  ],
+
   // turn
   YEARS_PER_TURN_OPTIONS: [10, 50, 250],
   DEFAULT_YEARS_PER_TURN: 10,

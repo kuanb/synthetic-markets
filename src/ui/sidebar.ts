@@ -425,6 +425,15 @@ export function mountSidebar(
       ],
     },
     {
+      // Social Stability system: stability drives labor efficiency + market coverage (see stability.ts)
+      title: 'Society',
+      rows: [
+        ['Social stability', (s) => `${s.markets[0].socialStability.toFixed(0)} / 100`],
+        ['Labor efficiency', (s) => `${(s.markets[0].laborEfficiency * 100).toFixed(0)}%`],
+        ['Market coverage', (s) => `${(s.markets[0].marketCoverage * 100).toFixed(0)}%`],
+      ],
+    },
+    {
       // yield efficiency: captured vs full land potential over owned cells (this cycle)
       title: 'Yield efficiency (cycle)',
       rows: [

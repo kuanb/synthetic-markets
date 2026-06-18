@@ -294,6 +294,11 @@ export const CONFIG = {
   EVENT_DIEOFF_FRAC: 0.10, EVENT_BOOM_FRAC: 0.25, EVENT_MIN_POP_FOR_DELTA: 25,
   EVENT_ENCOUNTER_MILESTONES: [1,3,5,10,25,50,100,250,500], EVENT_LOG_MAX: 500,
   OTHER_MARKETS_SHOWN: 5, EVENT_MARKET_SWING_FRAC: 0.5, WEALTH_TOP_FRACTION: 0.1,
+  // Social Stability (§11): penalties -> stability -> labor efficiency + market coverage
+  STABILITY_MAX: 100, STABILITY_WEALTH_ANCHORS, STABILITY_FOOD_SAFE_SURPLUS: 0.0,
+  STABILITY_FOOD_CRISIS_SURPLUS: -0.25, STABILITY_FOOD_MAX_PENALTY: 35,
+  STABILITY_TECH_SHOCK: 15, STABILITY_TECH_DECAY: 0.85, STABILITY_TECH_MAX_PENALTY: 50,
+  STABILITY_LABOR_ANCHORS, STABILITY_COVERAGE_ANCHORS,  // [stability, value] piecewise anchors
   // tech (v3: EXPENSIVE so advancing is a real choice; co-tuned with TECH_MULTIPLIER)
   TECH_MULTIPLIER: 1.5,              // ext(level) = TECH_MULTIPLIER ^ level   (RAW->GOODS only)
   FOOD_TECH_MULTIPLIER: 1.0,         // foodExt(level) = ^level; 1.0 = food land-limited (NOT ext)
@@ -1001,6 +1006,20 @@ this section reconciles them. (`AGENTS.md` carries the same list as the operatio
   the dense survivors, now on a smaller food base, risk a follow-on starvation collapse. Warning
   cards fire on each upward crossing of a `INSURRECTION_WARN_STEP` boundary from `INSURRECTION_WARN_FROM`
   (55%). Player-only; deterministic (`RNG_SALT.INSURRECTION`). Events: `warning`, `insurrection`.
+- **Social Stability + Labor Efficiency** — `sim/stability.ts` (a Polanyi "double movement" scaffold).
+  Every market carries `socialStability ∈ [0,100]`, recomputed at the END of each cycle as
+  `100 − wealthPenalty − foodStressPenalty − disruptionPenalty` (clamped). Inputs reuse existing
+  metrics: Top-10% `wealthConcentration`; a food-stress ramp on the per-capita surplus of the PRE-death
+  cohort (`Market.foodPop`) between `STABILITY_FOOD_SAFE_SURPLUS`→`_CRISIS_SURPLUS`; and a decaying
+  tech-disruption accumulator (`Market.techDisruption`, +`STABILITY_TECH_SHOCK` per tech level gained,
+  ×`STABILITY_TECH_DECAY`/yr, capped by `STABILITY_TECH_MAX_PENALTY`). Stability is CARRIED to the next
+  cycle, deriving `laborEfficiency ∈ [0.25,1]` (scales effective labor in `produce` → food/raw/research)
+  and `marketCoverage ∈ [0.5,1]` (scales goods capture in `accrueGoods`, WITHOUT removing territory).
+  All penalties/mappings are config anchor tables (`STABILITY_*_ANCHORS`). Pure & deterministic (no
+  RNG). `socialStability` is in `YearLog` and is the top-left history chart (replaced the
+  wealth/starvation chart there); the sidebar adds a "Society" group. Feedback loop:
+  tech/expansion → concentration + disruption → lower stability → less labor + coverage → weaker
+  output → pressure to intervene. Future social-event hooks live behind `stability.ts`.
 - **Yield efficiency** — per-cycle `foodPotentialThisCycle`/`rawPotentialThisCycle` accumulators on
   `Market` (captured-vs-potential food/raw in the sidebar).
 - **Snapshot ships more than markets[0]**: also `log` (full `YearLog[]` with `rawMined`,

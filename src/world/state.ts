@@ -67,6 +67,13 @@ export interface Market {
   rawMinedThisYear: number; // total raw units mined this year (reset each tick)
   techInvestedThisYear: number; // raw allocated to research this year (reset each tick)
   population: number;
+  // ---- Social Stability (see sim/stability.ts) ----
+  foodPop: number; // population facing the food check this cycle (pre-death; food-stress denominator)
+  socialStability: number; // [0,100]; recomputed each cycle, carried to the next
+  techDisruption: number; // accumulated, geometrically-decaying tech-change shock
+  techGainedThisCycle: number; // # tech levels unlocked this cycle (transient; feeds disruption shock)
+  laborEfficiency: number; // [0.25,1]; derived from stability, scales effective labor next cycle
+  marketCoverage: number; // [0.5,1]; derived from stability, scales goods capture next cycle
 }
 
 export interface YearLog {
@@ -83,6 +90,7 @@ export interface YearLog {
   // % of the year's at-risk population (survivors who fed + births + those who then starved) that
   // died of starvation. Surfaces tech-/expansion-driven growth outrunning the food system.
   starvationIndex: number;
+  socialStability: number; // [0,100] player Social Stability that cycle (see sim/stability.ts)
 }
 
 // Player-facing "major historical events" feed. Derived data only (never affects sim RNG / state
@@ -369,6 +377,12 @@ function makeMarket(id: number, isPlayer: boolean, propensityToExpand: number): 
     rawMinedThisYear: 0,
     techInvestedThisYear: 0,
     population: 0,
+    foodPop: 0,
+    socialStability: CONFIG.STABILITY_MAX, // start fully stable; first cycle runs at full labor
+    techDisruption: 0,
+    techGainedThisCycle: 0,
+    laborEfficiency: 1,
+    marketCoverage: 1,
   };
 }
 
@@ -650,6 +664,13 @@ export function deserialize(p: SerializedState): WorldState {
       rawToReserveThisCycle: m.rawToReserveThisCycle ?? 0,
       foodPotentialThisCycle: m.foodPotentialThisCycle ?? 0,
       rawPotentialThisCycle: m.rawPotentialThisCycle ?? 0,
+      // back-compat for saves predating Social Stability
+      foodPop: m.foodPop ?? 0,
+      socialStability: m.socialStability ?? CONFIG.STABILITY_MAX,
+      techDisruption: m.techDisruption ?? 0,
+      techGainedThisCycle: m.techGainedThisCycle ?? 0,
+      laborEfficiency: m.laborEfficiency ?? 1,
+      marketCoverage: m.marketCoverage ?? 1,
       // back-compat for saves predating the famine-tolerance knob
       policy: { ...m.policy, famineTolerance: m.policy.famineTolerance ?? CONFIG.FAMINE_TOLERANCE_DEFAULT },
       cells: new Set<number>(m.cells),
