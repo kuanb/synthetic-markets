@@ -22,7 +22,6 @@ export interface SidebarCallbacks {
   onAutoPlayChange(enabled: boolean): void;
   onRestart(): void;
   onOpenSettings(): void;
-  onOpenHelp(): void;
 }
 
 const css = `
