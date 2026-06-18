@@ -22,6 +22,7 @@ export interface SidebarCallbacks {
   onAutoPlayChange(enabled: boolean): void;
   onRestart(): void;
   onOpenSettings(): void;
+  onOpenHelp(): void;
 }
 
 const css = `
@@ -273,18 +274,23 @@ export function mountSidebar(
     yearBtns.appendChild(b);
   });
   turnSec.appendChild(yearBtns);
+
+  // End Turn + Auto-play share one row (equal halves).
+  const turnRow = el('div');
+  turnRow.style.cssText = 'display:flex;gap:6px;margin-top:8px;';
   const endBtn = el('button', 'sm-end', 'END TURN');
+  endBtn.style.flex = '1';
+  endBtn.style.marginTop = '0';
   endBtn.onclick = () => cb.onEndTurn(years);
-  turnSec.appendChild(endBtn);
+  turnRow.appendChild(endBtn);
 
   // auto-play toggle: keep ending turns automatically until off / game over
   let autoOn = false;
   const autoBtn = el('button', 'sm-btn');
-  autoBtn.style.width = '100%';
-  autoBtn.style.marginTop = '6px';
+  autoBtn.style.flex = '1';
   const renderAuto = () => {
     autoBtn.classList.toggle('active', autoOn);
-    autoBtn.textContent = autoOn ? 'AUTO-PLAY: ON \u23f8' : 'AUTO-PLAY: OFF \u25b6';
+    autoBtn.textContent = autoOn ? 'AUTO-PLAY \u23f8' : 'AUTO-PLAY \u25b6';
     // End Turn is redundant (and would double-step) while auto-play runs — grey it out + disable.
     endBtn.disabled = autoOn;
     endBtn.style.opacity = autoOn ? '0.4' : '';
@@ -297,7 +303,8 @@ export function mountSidebar(
     renderAuto();
     cb.onAutoPlayChange(autoOn);
   };
-  turnSec.appendChild(autoBtn);
+  turnRow.appendChild(autoBtn);
+  turnSec.appendChild(turnRow);
   root.appendChild(turnSec);
 
   // ----- stats -----
