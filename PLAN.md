@@ -719,12 +719,15 @@ it arms a dramatic, **tech-triggered** territory burst paid from the raw `rawRes
   the centroid. An **arm** (Bresenham corridor, random width `[ARM_WIDTH_MIN..MAX]=[5,20]`) runs
   from a random player **boundary** cell to the terminus, ending in an **irregular blob**
   (angle-wobbled radius `[TERMINUS_RADIUS_MIN..MAX]=[15,35]`).
-- **Annex (TECH-GATED, no conflict rolls).** **[DELTA]** Unowned and wild cells in the arm+terminus
-  are taken freely; an ENEMY market's cell is seized **only when the player out-techs that market**
-  (`player.techLevel > owner.techLevel`) — otherwise that cell is left untouched. Seized cells
-  become the player's (`marketId=0`, added to `cells`, removed from prior owner), banked `rawStock`
-  travels with the cell, all persons on them (wild + enemy) convert to the player, fog revealed.
-  Everything clamped to map bounds.
+- **Annex (TECH-GATED + CONTIGUOUS, no conflict rolls).** **[DELTA]** Unowned and wild cells in the
+  arm+terminus are taken freely; an ENEMY market's cell is seized **only when the player out-techs
+  that market** (`player.techLevel > owner.techLevel`) — otherwise that cell is left untouched.
+  **The arm is contiguous**: it is a flood-fill from the player's boundary cell, confined to the
+  corridor capsule (within `armR` of the start→terminus line) and only through passable cells (own,
+  unowned, wild, or lower-tech enemy). A superior enemy market is impassable, so a market that cuts
+  off the corridor blocks the burst entirely — nothing (and no terminus blob) appears on its far side. Seized cells become the player's (`marketId=0`, added
+  to `cells`, removed from prior owner), banked `rawStock` travels with the cell, all persons on them
+  (wild + enemy) convert to the player, fog revealed. Everything clamped to map bounds.
 
 (AI markets still use the legacy `burstSpend` propensity pulse for their own expansion, §5.6.)
 

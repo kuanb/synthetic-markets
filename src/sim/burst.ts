@@ -4,6 +4,9 @@
 // and wild cells are taken freely, but an ENEMY market's cell is only seized when the player
 // out-techs that market (otherwise it is left untouched). Seized cells are re-owned, banked
 // rawStock transfers with the cell, and all persons on them (wild and enemy) convert to the player.
+// CONTIGUITY: the arm is a flood-fill from the player's boundary through passable cells, confined to
+// the corridor capsule. An enemy market the player can't out-tech is impassable, so a market that
+// cuts off the corridor blocks the burst — NOTHING (and no terminus blob) appears on its far side.
 // Returns true iff the geometry ran (so the caller deducts reserves on a real burst).
 
 import { CONFIG } from '../config';
@@ -27,22 +30,24 @@ function annexCell(s: WorldState, player: Market, cell: number): void {
   s.discovered[cell] = 1; // player vision
 }
 
-// Annex a filled disk of radius `r` (clamped to bounds) centered at (cx,cy).
-function annexDisk(s: WorldState, player: Market, cx: number, cy: number, r: number): void {
-  const W = s.width;
-  const H = s.height;
-  const r2 = r * r;
-  const x0 = Math.max(0, Math.floor(cx - r));
-  const x1 = Math.min(W - 1, Math.ceil(cx + r));
-  const y0 = Math.max(0, Math.floor(cy - r));
-  const y1 = Math.min(H - 1, Math.ceil(cy + r));
-  for (let y = y0; y <= y1; y++) {
-    for (let x = x0; x <= x1; x++) {
-      const dx = x - cx;
-      const dy = y - cy;
-      if (dx * dx + dy * dy <= r2) annexCell(s, player, y * W + x);
-    }
-  }
+// The corridor can advance into a cell unless it is an enemy market the player does NOT out-tech
+// (the same tech gate as annexCell). Such a cell blocks the contiguous arm.
+function passable(s: WorldState, cell: number, player: Market): boolean {
+  const prev = s.marketId[cell];
+  return !(prev >= 1 && s.markets[prev].techLevel >= player.techLevel);
+}
+
+// Squared distance from point (px,py) to the segment (ax,ay)-(bx,by). Used to confine the arm
+// flood-fill to a "capsule" (corridor of half-width armR) around the centerline.
+function segDist2(px: number, py: number, ax: number, ay: number, bx: number, by: number): number {
+  const abx = bx - ax;
+  const aby = by - ay;
+  const len2 = abx * abx + aby * aby;
+  let t = len2 > 0 ? ((px - ax) * abx + (py - ay) * aby) / len2 : 0;
+  t = Math.max(0, Math.min(1, t));
+  const dx = px - (ax + t * abx);
+  const dy = py - (ay + t * aby);
+  return dx * dx + dy * dy;
 }
 
 export function fireBurst(s: WorldState, player: Market, rng: RNG): boolean {
@@ -120,31 +125,44 @@ export function fireBurst(s: WorldState, player: Market, rng: RNG): boolean {
   const armWidth =
     CONFIG.ARM_WIDTH_MIN + rng.nextInt(CONFIG.ARM_WIDTH_MAX - CONFIG.ARM_WIDTH_MIN + 1);
   const armR = armWidth / 2;
+  // CONTIGUITY: the arm is a FLOOD-FILL from the player's boundary cell, confined to the corridor
+  // "capsule" (within armR of the start->terminus centerline) and only through PASSABLE cells (own,
+  // unowned, wild, or lower-tech enemy). An enemy market the player can't out-tech is impassable, so
+  // a market that cuts off the corridor blocks the burst entirely — no cells (and no terminus blob)
+  // ever appear on its far side. `reachedTerminus` gates the blob below.
+  let reachedTerminus = false;
   {
-    // Bresenham from (bx,by) to (tx,ty), painting a disk of radius armR at each step.
-    let x = bx;
-    let y = by;
-    const dx = Math.abs(tx - bx);
-    const dy = Math.abs(ty - by);
-    const sx = bx < tx ? 1 : -1;
-    const sy = by < ty ? 1 : -1;
-    let err = dx - dy;
-    for (;;) {
-      annexDisk(s, player, x, y, armR);
-      if (x === tx && y === ty) break;
-      const e2 = 2 * err;
-      if (e2 > -dy) {
-        err -= dy;
-        x += sx;
-      }
-      if (e2 < dx) {
-        err += dx;
-        y += sy;
+    const armR2 = armR * armR;
+    const visited = new Uint8Array(W * H);
+    const queue = [start];
+    visited[start] = 1;
+    for (let qh = 0; qh < queue.length; qh++) {
+      const cell = queue[qh];
+      annexCell(s, player, cell);
+      if (cell === term) reachedTerminus = true;
+      const cx = cell % W;
+      const cy = (cell / W) | 0;
+      const neighbors = [
+        [cx + 1, cy],
+        [cx - 1, cy],
+        [cx, cy + 1],
+        [cx, cy - 1],
+      ];
+      for (const [nx, ny] of neighbors) {
+        if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
+        const nc = ny * W + nx;
+        if (visited[nc]) continue;
+        visited[nc] = 1; // mark regardless so impassable/out-of-capsule cells aren't re-checked
+        if (segDist2(nx, ny, bx, by, tx, ty) > armR2) continue; // outside the corridor capsule
+        if (!passable(s, nc, player)) continue; // blocked by a superior enemy market
+        queue.push(nc);
       }
     }
   }
 
   // Terminus blob: irregular (NOT a perfect circle) radius in [MIN,MAX], wobbling by angle.
+  // (RNG draws below run unconditionally to keep the stream deterministic; only the painting of the
+  // blob is gated on the corridor actually having reached the terminus contiguously.)
   const baseR =
     CONFIG.TERMINUS_RADIUS_MIN +
     rng.nextInt(CONFIG.TERMINUS_RADIUS_MAX - CONFIG.TERMINUS_RADIUS_MIN + 1);
@@ -152,18 +170,20 @@ export function fireBurst(s: WorldState, player: Market, rng: RNG): boolean {
   const harmonic = 2 + rng.nextInt(3); // 2..4 lobes
   const wobble = 0.2 + rng.next() * 0.3; // 0.2..0.5
   const outer = Math.ceil(baseR * (1 + wobble)) + 1;
-  const x0 = Math.max(0, tx - outer);
-  const x1 = Math.min(W - 1, tx + outer);
-  const y0 = Math.max(0, ty - outer);
-  const y1 = Math.min(H - 1, ty + outer);
-  for (let y = y0; y <= y1; y++) {
-    for (let x = x0; x <= x1; x++) {
-      const dx = x - tx;
-      const dy = y - ty;
-      const d = Math.sqrt(dx * dx + dy * dy);
-      const ang = Math.atan2(dy, dx);
-      const rThresh = baseR * (1 + wobble * Math.sin(harmonic * ang + phase));
-      if (d <= rThresh) annexCell(s, player, y * W + x);
+  if (reachedTerminus) {
+    const x0 = Math.max(0, tx - outer);
+    const x1 = Math.min(W - 1, tx + outer);
+    const y0 = Math.max(0, ty - outer);
+    const y1 = Math.min(H - 1, ty + outer);
+    for (let y = y0; y <= y1; y++) {
+      for (let x = x0; x <= x1; x++) {
+        const dx = x - tx;
+        const dy = y - ty;
+        const d = Math.sqrt(dx * dx + dy * dy);
+        const ang = Math.atan2(dy, dx);
+        const rThresh = baseR * (1 + wobble * Math.sin(harmonic * ang + phase));
+        if (d <= rThresh) annexCell(s, player, y * W + x);
+      }
     }
   }
 
