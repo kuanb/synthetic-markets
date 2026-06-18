@@ -95,7 +95,11 @@ export function showSummary(root: HTMLElement, outcome: 'win' | 'loss', log: Yea
   const totalGoods = log.reduce((a, l) => a + l.goods, 0);
   const peakPop = log.reduce((a, l) => Math.max(a, l.population), 0);
   const finalYear = log.length ? log[log.length - 1].year : 0;
-  const peakWealthConc = log.reduce((a, l) => Math.max(a, l.wealthConcentration ?? 0), 0);
+  // Average over the whole run (the early-game spike is a meaningless transient; the mean over
+  // thousands of years reflects what concentration actually was for most of history).
+  const avgWealthConc = log.length
+    ? log.reduce((a, l) => a + (l.wealthConcentration ?? 0), 0) / log.length
+    : 0;
   const finalWealthConc = log.length ? (log[log.length - 1].wealthConcentration ?? 0) : 0;
 
   const overlay = document.createElement('div');
@@ -117,11 +121,14 @@ export function showSummary(root: HTMLElement, outcome: 'win' | 'loss', log: Yea
       <div style="color:#e6a06f;font-size:11px;letter-spacing:.08em;text-transform:uppercase">
         Wealth concentration</div>
       <div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:3px">
-        <span style="font-size:20px;font-weight:600;color:#fff">${peakWealthConc.toFixed(0)}%</span>
-        <span style="color:#9aa;font-size:12px">peak \u00b7 ${finalWealthConc.toFixed(0)}% final</span>
+        <span style="font-size:20px;font-weight:600;color:#fff">${avgWealthConc.toFixed(0)}%</span>
+        <span style="color:#9aa;font-size:12px">avg over history \u00b7 ${finalWealthConc.toFixed(
+          0,
+        )}% final</span>
       </div>
-      <div style="color:#7d8590;font-size:11px;margin-top:4px">Food-land the densest 10% of the
-        population required, as a share of total capacity. Higher = more unbalanced.</div>
+      <div style="color:#7d8590;font-size:11px;margin-top:4px">Food-land the 10% of the population
+        on the highest raw-yielding cells required, as a share of total capacity. Higher = more
+        unbalanced.</div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 16px;font-size:13px">
       <div style="display:flex;justify-content:space-between"><span style="color:#888">Peak population</span><b>${formatNumber(
