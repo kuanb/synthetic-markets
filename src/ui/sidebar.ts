@@ -262,18 +262,45 @@ export function mountSidebar(
   const turnSec = el('div', 'sm-sec');
   turnSec.appendChild(el('div', 'sm-head', 'Years per turn'));
   let years: number = CONFIG.DEFAULT_YEARS_PER_TURN;
-  const yearBtns = el('div', 'sm-btns');
-  CONFIG.YEARS_PER_TURN_OPTIONS.forEach((opt) => {
-    const b = el('button', 'sm-btn' + (opt === years ? ' active' : ''), String(opt));
-    b.onclick = () => {
+  // Segmented control: one connected track with a blue highlight that SLIDES over the selection.
+  const yearOpts = CONFIG.YEARS_PER_TURN_OPTIONS;
+  const segW = 100 / yearOpts.length;
+  const yearWrap = el('div');
+  yearWrap.style.cssText =
+    'position:relative;display:flex;background:#0a0a0a;border:1px solid #2a2a2a;border-radius:4px;overflow:hidden;';
+  const yearSlider = el('div');
+  yearSlider.style.cssText =
+    `position:absolute;top:0;bottom:0;left:0;width:${segW}%;background:#1d3a4d;` +
+    'border:1px solid #2f6e92;border-radius:3px;box-sizing:border-box;' +
+    'transition:left 0.18s ease;pointer-events:none;';
+  yearWrap.appendChild(yearSlider);
+  const yearSegs: HTMLButtonElement[] = [];
+  const paintYears = () => {
+    yearSegs.forEach((seg, i) => {
+      seg.style.color = yearOpts[i] === years ? '#fff' : '#9aa';
+    });
+  };
+  yearOpts.forEach((opt, idx) => {
+    const seg = el('button', undefined, String(opt));
+    seg.style.cssText =
+      'position:relative;z-index:1;flex:1;background:none;border:none;padding:7px 6px;' +
+      'cursor:pointer;font:inherit;';
+    seg.onclick = () => {
       years = opt;
-      [...yearBtns.children].forEach((x) => (x as HTMLElement).classList.remove('active'));
-      b.classList.add('active');
+      yearSlider.style.left = `${idx * segW}%`;
+      paintYears();
       cb.onYearsChange(years);
     };
-    yearBtns.appendChild(b);
+    yearSegs.push(seg);
+    yearWrap.appendChild(seg);
   });
-  turnSec.appendChild(yearBtns);
+  const defIdx = Math.max(
+    0,
+    yearOpts.findIndex((o) => o === years),
+  );
+  yearSlider.style.left = `${defIdx * segW}%`;
+  paintYears();
+  turnSec.appendChild(yearWrap);
 
   // End Turn + Auto-play share one row (equal halves).
   const turnRow = el('div');

@@ -147,6 +147,7 @@ const sidebar = mountSidebar(sidebarRoot, {
   },
   onRestart: startNewGame,
   onOpenSettings: openSettings,
+  onOpenHelp: () => {}, // TODO: orphaned stub in SidebarCallbacks (no Help button/modal wired yet)
 });
 
 function findPlayerCell(s: Snapshot): number {
