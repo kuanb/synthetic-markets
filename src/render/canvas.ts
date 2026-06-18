@@ -68,16 +68,22 @@ export function draw(
       if (!snap.discovered[i]) continue; // fog: undiscovered cells are blank
 
       const hue = snap.cellHue[i];
-      const owned = snap.marketId[i] >= 0;
 
       if (mode === 'peoples') {
-        if (owned) {
-          ctx.fillStyle = `hsla(${hue}, 70%, 50%, 0.22)`;
+        const pop = snap.cellPopulation[i];
+        // Shade owned/wild cells by POPULATION DENSITY: low pop = light + transparent, high pop =
+        // dark + opaque. Normalized to the GLOBAL max cell population (sqrt curve to spread the low
+        // end) so the ramp is identical across markets — relative densities read at a glance.
+        if (hue >= 0) {
+          const dens =
+            snap.maxCellPopulation > 0 ? Math.sqrt(Math.min(1, pop / snap.maxCellPopulation)) : 0;
+          const light = 72 - 42 * dens; // 72% (light) -> 30% (dark)
+          const alpha = 0.15 + 0.75 * dens; // 0.15 (faint) -> 0.9 (opaque)
+          ctx.fillStyle = `hsla(${hue}, 70%, ${light}%, ${alpha})`;
           ctx.fillRect(sx, sy, cs, cs);
         }
-        const pop = snap.cellPopulation[i];
         if (pop > 0 && hue >= 0) {
-          drawLabel(ctx, formatCell(pop), sx, sy, cs, fontPx, `hsl(${hue}, 90%, 72%)`);
+          drawLabel(ctx, formatCell(pop), sx, sy, cs, fontPx, `hsl(${hue}, 90%, 78%)`);
         }
       } else {
         const v = mode === 'food' ? snap.foodDisplay[i] : snap.rawDisplay[i];

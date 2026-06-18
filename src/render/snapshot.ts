@@ -75,6 +75,7 @@ export interface Snapshot {
   discovered: Uint8Array;
   marketId: Int32Array;
   cellPopulation: Int32Array;
+  maxCellPopulation: number; // global max cell population (stable density ramp for the markets view)
   cellHue: Int16Array; // dominant owner hue, -1 if none
   foodDisplay: Float32Array;
   rawDisplay: Float32Array;
@@ -117,6 +118,7 @@ export function buildSnapshot(s: WorldState): Snapshot {
   const rawDisplay = new Float32Array(n);
   const techExt = s.markets.map((m) => ext(m.techLevel));
 
+  let maxCellPopulation = 0;
   for (let cell = 0; cell < n; cell++) {
     const mid = s.marketId[cell];
     if (mid >= 0) {
@@ -127,6 +129,7 @@ export function buildSnapshot(s: WorldState): Snapshot {
       if (s.cellPopulation[cell] > 0) cellHue[cell] = Math.round(dominantWildHue(s, cell));
     }
     rawDisplay[cell] = s.rawYield[cell] + s.rawStock[cell];
+    if (s.cellPopulation[cell] > maxCellPopulation) maxCellPopulation = s.cellPopulation[cell];
   }
 
   const max = maxTechLevel();
@@ -197,6 +200,7 @@ export function buildSnapshot(s: WorldState): Snapshot {
     discovered: s.discovered.slice(),
     marketId: s.marketId.slice(),
     cellPopulation: s.cellPopulation.slice(),
+    maxCellPopulation,
     cellHue,
     foodDisplay,
     rawDisplay,
