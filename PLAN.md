@@ -297,7 +297,8 @@ export const CONFIG = {
   // Social Stability (§11): penalties -> stability -> labor efficiency + market coverage
   STABILITY_MAX: 100, STABILITY_WEALTH_ANCHORS, STABILITY_FOOD_SAFE_SURPLUS: 0.0,
   STABILITY_FOOD_CRISIS_SURPLUS: -0.25, STABILITY_FOOD_MAX_PENALTY: 35,
-  STABILITY_TECH_SHOCK: 15, STABILITY_TECH_DECAY: 0.85, STABILITY_TECH_MAX_PENALTY: 50,
+  STABILITY_TECH_SHOCK_BASE: 10, STABILITY_TECH_SHOCK_PER_LEVEL: 2.2, // shock scales with era
+  STABILITY_TECH_DECAY: 0.9, STABILITY_TECH_MAX_PENALTY: 90,
   STABILITY_LABOR_ANCHORS, STABILITY_COVERAGE_ANCHORS,  // [stability, value] piecewise anchors
   // tech (v3: EXPENSIVE so advancing is a real choice; co-tuned with TECH_MULTIPLIER)
   TECH_MULTIPLIER: 1.5,              // ext(level) = TECH_MULTIPLIER ^ level   (RAW->GOODS only)
@@ -1011,8 +1012,10 @@ this section reconciles them. (`AGENTS.md` carries the same list as the operatio
   `100 − wealthPenalty − foodStressPenalty − disruptionPenalty` (clamped). Inputs reuse existing
   metrics: Top-10% `wealthConcentration`; a food-stress ramp on the per-capita surplus of the PRE-death
   cohort (`Market.foodPop`) between `STABILITY_FOOD_SAFE_SURPLUS`→`_CRISIS_SURPLUS`; and a decaying
-  tech-disruption accumulator (`Market.techDisruption`, +`STABILITY_TECH_SHOCK` per tech level gained,
-  ×`STABILITY_TECH_DECAY`/yr, capped by `STABILITY_TECH_MAX_PENALTY`). Stability is CARRIED to the next
+  tech-disruption accumulator (`Market.techDisruption`, += `techShock(level)` =
+  `STABILITY_TECH_SHOCK_BASE + STABILITY_TECH_SHOCK_PER_LEVEL*level` per tech level gained — the shock
+  SCALES WITH THE ERA, so a late tech is a social earthquake — ×`STABILITY_TECH_DECAY`/yr, capped by
+  `STABILITY_TECH_MAX_PENALTY`). Stability is CARRIED to the next
   cycle, deriving `laborEfficiency ∈ [0.25,1]` (scales effective labor in `produce` → food/raw/research)
   and `marketCoverage ∈ [0.5,1]` (scales goods capture in `accrueGoods`, WITHOUT removing territory).
   All penalties/mappings are config anchor tables (`STABILITY_*_ANCHORS`). Pure & deterministic (no

@@ -56,6 +56,12 @@ export function disruptionPenalty(techDisruption: number): number {
   return Math.min(techDisruption, CONFIG.STABILITY_TECH_MAX_PENALTY);
 }
 
+// Disruption shock injected when a market REACHES `level`. Scales with the era so a late,
+// civilization-altering technology is a social earthquake, not the same ripple as a stone tool.
+export function techShock(level: number): number {
+  return CONFIG.STABILITY_TECH_SHOCK_BASE + CONFIG.STABILITY_TECH_SHOCK_PER_LEVEL * level;
+}
+
 export function computeStability(
   concentration: number,
   food: number,
@@ -87,7 +93,9 @@ export function updateSocialStability(s: WorldState, m: Market): void {
   m.techDisruption *= CONFIG.STABILITY_TECH_DECAY;
   if (m.techDisruption < 0.01) m.techDisruption = 0;
   if (m.techGainedThisCycle > 0) {
-    m.techDisruption += CONFIG.STABILITY_TECH_SHOCK * m.techGainedThisCycle;
+    // Shock scales with the level just reached (era-defining late techs hit hardest). techLevel is
+    // the post-unlock level; multiply by levels gained for the rare multi-unlock cycle.
+    m.techDisruption += techShock(m.techLevel) * m.techGainedThisCycle;
   }
   const concentration = wealthConcentration(s, m);
   // Food stress uses the PRE-death cohort (m.foodPop): at carrying capacity, deaths cull population

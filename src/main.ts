@@ -778,7 +778,9 @@ const HELP_SECTIONS: Array<{ h: string; body: string }> = [
       'Markets are sustained by the society inside them. <b>Social Stability</b> (0\u2013100) tracks ' +
       'that society\u2019s capacity to keep participating in the market \u2014 it falls as <b>wealth ' +
       'concentrates</b>, <b>food security weakens</b>, or <b>technology changes faster than people ' +
-      'can adapt</b> (each new tech is a temporary shock that fades over time). Low stability has ' +
+      'can adapt</b> (each new tech is a shock that fades over time \u2014 and <b>later, era-defining ' +
+      'technologies hit far harder than early ones</b>, so a major breakthrough can throw society into ' +
+      'years of upheaval). Low stability has ' +
       'teeth: it cuts <b>Labor Efficiency</b> (how much of your workforce actually shows up \u2014 ' +
       'scaling food, mining and research alike) and <b>Market Coverage</b> (how much of your output ' +
       'the formal market captures, as activity slips informal \u2014 your territory is unaffected). ' +

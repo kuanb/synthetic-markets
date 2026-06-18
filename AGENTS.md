@@ -155,7 +155,8 @@ Reporting / state (all derived; persisted with the world):
   `100 − wealthPenalty − foodStressPenalty − disruptionPenalty` (clamped). Inputs reuse existing
   metrics: the Top-10% `wealthConcentration`, a food-stress ramp on the per-capita surplus of the
   PRE-death cohort (`Market.foodPop`), and a decaying tech-disruption accumulator
-  (`Market.techDisruption`, +`STABILITY_TECH_SHOCK` per level gained, ×`STABILITY_TECH_DECAY`/yr).
+  (`Market.techDisruption`, +`techShock(level)` per level gained — the shock SCALES WITH THE ERA via
+  `STABILITY_TECH_SHOCK_BASE`/`_PER_LEVEL`, so late techs are social earthquakes — ×`STABILITY_TECH_DECAY`/yr).
   Stability is CARRIED to the next cycle where it drives `laborEfficiency ∈ [0.25,1]` (scales effective
   labor in `produce` → food/raw/research) and `marketCoverage ∈ [0.5,1]` (scales goods capture in
   `accrueGoods`, WITHOUT removing territory). All pure/deterministic (no RNG). Mappings are

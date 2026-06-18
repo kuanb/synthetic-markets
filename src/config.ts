@@ -184,11 +184,14 @@ export const CONFIG = {
   STABILITY_FOOD_CRISIS_SURPLUS: -0.25, // surplus ratio at/below which food stress is maxed (deficit)
   STABILITY_FOOD_MAX_PENALTY: 35,
   // Technology disruption: each tech level gained injects a shock that decays geometrically each year
-  // (society needs time to adapt). The disruption penalty is capped so a tech sprint alone can't zero
-  // stability. The decay/shock are applied per simulated year inside the stability update.
-  STABILITY_TECH_SHOCK: 15, // disruption added per tech level unlocked
-  STABILITY_TECH_DECAY: 0.85, // disruption *= this each year (≈ a decade to fade a single shock)
-  STABILITY_TECH_MAX_PENALTY: 50, // cap on the disruption penalty
+  // (society needs time to adapt). The shock SCALES WITH THE ERA — an early tool (Hoe) barely ripples,
+  // while a late, civilization-altering technology (Synthetic Fertilizer, Satellites, Fusion) is a
+  // social earthquake. shock(level) = STABILITY_TECH_SHOCK_BASE + STABILITY_TECH_SHOCK_PER_LEVEL*level.
+  // The decay/shock are applied per simulated year inside the stability update.
+  STABILITY_TECH_SHOCK_BASE: 10, // disruption from a level-0->1 unlock (the gentlest, earliest tech)
+  STABILITY_TECH_SHOCK_PER_LEVEL: 2.2, // added disruption per tech LEVEL reached (era scaling)
+  STABILITY_TECH_DECAY: 0.9, // disruption *= this each year (a big late shock now lingers ~2 decades)
+  STABILITY_TECH_MAX_PENALTY: 90, // cap on the disruption penalty (late tech can nearly zero stability)
   // Labor efficiency from stability: fraction of allocated labor that can be mobilised (strikes,
   // unrest, absenteeism, distrust...). Piecewise-linear over [stability, efficiency], clamped [.25,1].
   STABILITY_LABOR_ANCHORS: [
