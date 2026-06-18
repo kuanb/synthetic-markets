@@ -1,9 +1,10 @@
 // Forced Intervention — Market Expansion: a dramatic, tech-triggered territory burst.
 // Geometry is deterministic given the tick's forked RNG (RNG_SALT.BURST). fireBurst annexes an
-// arm + irregular terminus blob of fresh territory into the player market UNCONDITIONALLY (no
-// conflict rolls): cells re-owned, banked rawStock transfers with the cell, and ALL persons on
-// annexed cells (wild and enemy) convert to the player. Returns true iff anything was annexed
-// (so the caller only deducts reserves on a real burst; otherwise the burst stays pending).
+// arm + irregular terminus blob of territory into the player market (no conflict rolls): unowned
+// and wild cells are taken freely, but an ENEMY market's cell is only seized when the player
+// out-techs that market (otherwise it is left untouched). Seized cells are re-owned, banked
+// rawStock transfers with the cell, and all persons on them (wild and enemy) convert to the player.
+// Returns true iff the geometry ran (so the caller deducts reserves on a real burst).
 
 import { CONFIG } from '../config';
 import type { RNG } from '../world/rng';
@@ -11,6 +12,9 @@ import { type Market, type WorldState, setPersonOwner } from '../world/state';
 
 function annexCell(s: WorldState, player: Market, cell: number): void {
   const prev = s.marketId[cell];
+  // Tech gate: a burst can only seize an ENEMY market's cell if the player OUT-TECHS that market.
+  // Unowned/wild cells (prev === -1) and the player's own cells (prev === 0) are unaffected.
+  if (prev >= 1 && s.markets[prev].techLevel >= player.techLevel) return;
   if (prev !== 0) {
     if (prev >= 0) s.markets[prev].cells.delete(cell);
     s.marketId[cell] = 0;
