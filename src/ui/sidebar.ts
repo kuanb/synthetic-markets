@@ -35,6 +35,8 @@ const css = `
 .sm-row { display: flex; justify-content: space-between; gap: 8px; margin: 3px 0; }
 .sm-row span:last-child { color: #fff; }
 .sm-row span:first-child { color: #888; }
+.sm-grp { border: 1px solid #1f1f1f; border-radius: 5px; padding: 6px 9px 7px; margin: 8px 0; background: #0a0a0a; }
+.sm-grp-h { color: #6f7a85; font-size: 10px; letter-spacing: .11em; text-transform: uppercase; margin: 1px 0 4px; }
 .sm-btns { display: flex; gap: 6px; flex-wrap: wrap; }
 .sm-btn { flex: 1; min-width: 56px; background: #111; color: #ccc; border: 1px solid #2a2a2a;
   padding: 7px 6px; cursor: pointer; font: inherit; border-radius: 3px; }
@@ -43,6 +45,22 @@ const css = `
 .sm-end { width: 100%; background: #1d3a4d; color: #fff; border: 1px solid #2f6e92; padding: 11px;
   font: inherit; font-weight: 600; cursor: pointer; border-radius: 3px; margin-top: 8px; letter-spacing: .05em; }
 .sm-end:hover { background: #244a63; }
+/* Turn-mechanic buttons use a burgundy palette, distinct from the blue selection highlights. */
+.sm-turn { flex: 1; background: #5a2236; color: #fff; border: 1px solid #9a3a58; padding: 11px;
+  font: inherit; font-weight: 600; cursor: pointer; border-radius: 3px; letter-spacing: .05em; }
+.sm-turn:hover { background: #6e2a43; }
+.sm-turn:disabled { opacity: .4; cursor: not-allowed; }
+.sm-toggle { flex: 1; display: flex; align-items: center; justify-content: center; gap: 8px;
+  background: #1c0f14; color: #d6a9b6; border: 1px solid #7a3148; padding: 11px;
+  font: inherit; font-weight: 600; cursor: pointer; border-radius: 3px; letter-spacing: .05em; }
+.sm-toggle:hover { background: #271319; }
+.sm-toggle.active { background: #6e2440; color: #fff; border-color: #b04668; }
+.sm-switch { display: inline-block; width: 26px; height: 14px; border-radius: 8px; flex: none;
+  background: #3a2228; border: 1px solid #8a3a52; position: relative; transition: background .15s; }
+.sm-switch i { position: absolute; top: 1px; left: 1px; width: 10px; height: 10px; border-radius: 50%;
+  background: #b97f8d; transition: left .15s, background .15s; }
+.sm-toggle.active .sm-switch { background: #c44a6e; border-color: #d96f93; }
+.sm-toggle.active .sm-switch i { left: 13px; background: #fff; }
 .sm-slider { width: 100%; margin: 2px 0 2px; accent-color: #8a93a0; }
 .sm-head { color: #9ab; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; margin-bottom: 8px; }
 .sm-box { margin-top: 10px; padding: 10px; background: #0a0a0a; border: 1px solid #1c1c1c; border-radius: 4px; }
@@ -312,27 +330,26 @@ export function mountSidebar(
   paintYears();
   turnSec.appendChild(yearWrap);
 
-  // End Turn + Auto-play share one row (equal halves).
+  // End Turn + Auto-play share one row (equal halves). Burgundy palette so the turn mechanic reads
+  // as distinct from the blue selection highlights (years-per-turn / zoom).
   const turnRow = el('div');
   turnRow.style.cssText = 'display:flex;gap:6px;margin-top:8px;';
-  const endBtn = el('button', 'sm-end', 'END TURN');
-  endBtn.style.flex = '1';
-  endBtn.style.marginTop = '0';
+  const endBtn = el('button', 'sm-turn', 'END TURN');
   endBtn.onclick = () => cb.onEndTurn(years);
   turnRow.appendChild(endBtn);
 
-  // auto-play toggle: keep ending turns automatically until off / game over
+  // auto-play toggle: keep ending turns automatically until off / game over. A sliding on/off
+  // switch makes its state obvious at a glance.
   let autoOn = false;
-  const autoBtn = el('button', 'sm-btn');
-  autoBtn.style.flex = '1';
+  const autoBtn = el('button', 'sm-toggle');
+  autoBtn.appendChild(el('span', undefined, 'AUTO-PLAY'));
+  const autoSwitch = el('span', 'sm-switch');
+  autoSwitch.appendChild(el('i'));
+  autoBtn.appendChild(autoSwitch);
   const renderAuto = () => {
     autoBtn.classList.toggle('active', autoOn);
-    autoBtn.textContent = autoOn ? 'AUTO-PLAY \u23f8' : 'AUTO-PLAY \u25b6';
-    // End Turn is redundant (and would double-step) while auto-play runs — grey it out + disable.
+    // End Turn is redundant (and would double-step) while auto-play runs — disable it (CSS greys it).
     endBtn.disabled = autoOn;
-    endBtn.style.opacity = autoOn ? '0.4' : '';
-    endBtn.style.pointerEvents = autoOn ? 'none' : '';
-    endBtn.style.cursor = autoOn ? 'not-allowed' : '';
   };
   renderAuto();
   autoBtn.onclick = () => {
@@ -363,87 +380,120 @@ export function mountSidebar(
   gameSec.appendChild(restartBtn);
   root.appendChild(gameSec);
 
-  const rowsSpec: Array<[string, (s: Snapshot) => string]> = [
-    ['Year', (s) => String(s.year)],
-    ['Technology', (s) => s.markets[0].techName],
-    [
-      'Research',
-      (s) =>
-        s.markets[0].researchCostNext > 0
-          ? `${formatNumber(s.markets[0].techProgress)} / ${formatNumber(
-              s.markets[0].researchCostNext,
-            )} \u2192 ${s.markets[0].nextTechName}`
-          : 'max',
-    ],
-    ['Population', (s) => formatNumber(s.markets[0].population)],
-    ['Market size', (s) => `${formatNumber(s.markets[0].cells)} cells`],
-    ['Capital Wealth', (s) => formatNumber(s.markets[0].capitalWealth)],
-    ['Reserves', (s) => formatNumber(s.markets[0].rawReserves)],
-    ['Goods / cycle', (s) => formatNumber(s.markets[0].goodsProduced)],
-    [
-      'Consumed / capita',
-      (s) =>
-        s.markets[0].population > 0
-          ? formatNumber(s.markets[0].goodsConsumed / s.markets[0].population)
-          : '0',
-    ],
-    ['Orientation', (s) => s.markets[0].orientation.toFixed(2)],
-    ['Wealth concentration', (s) => `${s.markets[0].wealthConcentration.toFixed(0)}%`],
-    // yield efficiency: captured vs full land potential over owned cells (this cycle)
-    [
-      'Food yield (cap/util)',
-      (s) =>
-        `${formatNumber(s.markets[0].foodCaptured)} / ${formatNumber(s.markets[0].foodPotential)}`,
-    ],
-    [
-      'Food efficiency',
-      (s) =>
-        s.markets[0].foodPotential > 0
-          ? `${((s.markets[0].foodCaptured / s.markets[0].foodPotential) * 100).toFixed(0)}%`
-          : '0%',
-    ],
-    [
-      'Raw yield (cap/util)',
-      (s) =>
-        `${formatNumber(s.markets[0].rawCaptured)} / ${formatNumber(s.markets[0].rawPotential)}`,
-    ],
-    [
-      'Raw efficiency',
-      (s) =>
-        s.markets[0].rawPotential > 0
-          ? `${((s.markets[0].rawCaptured / s.markets[0].rawPotential) * 100).toFixed(0)}%`
-          : '0%',
-    ],
-    // supply vs demand this turn (totals across the batched years)
-    [
-      'Food req / produced',
-      (s) =>
-        `${formatNumber(s.markets[0].foodNeededThisTurn)} / ${formatNumber(
-          s.markets[0].foodProducedThisTurn,
-        )}`,
-    ],
-    [
-      'Goods req / available',
-      (s) =>
-        `${formatNumber(s.markets[0].goodsNeededThisTurn)} / ${formatNumber(
-          s.markets[0].goodsAvailableThisTurn,
-        )}`,
-    ],
-    // deaths split by cause
-    [
-      'Deaths \u2014 food (turn)',
-      (s) => `${formatNumber(s.markets[0].foodDeathsThisTurn)} (\u03a3 ${formatNumber(
-        s.markets[0].foodDeathsTotal,
-      )})`,
-    ],
-    [
-      'Deaths \u2014 goods (turn)',
-      (s) => `${formatNumber(s.markets[0].goodsDeathsThisTurn)} (\u03a3 ${formatNumber(
-        s.markets[0].goodsDeathsTotal,
-      )})`,
-    ],
-    ['Deaths \u2014 total (turn)', (s) => formatNumber(s.markets[0].diedThisTurn)],
-    ['Deaths (cumulative)', (s) => formatNumber(s.markets[0].cumulativeDead)],
+  // Stats are grouped by theme so the eye can scan across rows within a bordered block
+  // instead of one undifferentiated wall of key/value pairs.
+  type Row = [string, (s: Snapshot) => string];
+  const statGroups: Array<{ title: string; rows: Row[] }> = [
+    {
+      title: 'Status',
+      rows: [
+        ['Year', (s) => String(s.year)],
+        ['Technology', (s) => s.markets[0].techName],
+        [
+          'Research',
+          (s) =>
+            s.markets[0].researchCostNext > 0
+              ? `${formatNumber(s.markets[0].techProgress)} / ${formatNumber(
+                  s.markets[0].researchCostNext,
+                )} \u2192 ${s.markets[0].nextTechName}`
+              : 'max',
+        ],
+      ],
+    },
+    {
+      title: 'Population & territory',
+      rows: [
+        ['Population', (s) => formatNumber(s.markets[0].population)],
+        ['Market size', (s) => `${formatNumber(s.markets[0].cells)} cells`],
+        ['Orientation', (s) => s.markets[0].orientation.toFixed(2)],
+      ],
+    },
+    {
+      title: 'Economy',
+      rows: [
+        ['Capital Wealth', (s) => formatNumber(s.markets[0].capitalWealth)],
+        ['Reserves', (s) => formatNumber(s.markets[0].rawReserves)],
+        ['Goods / cycle', (s) => formatNumber(s.markets[0].goodsProduced)],
+        [
+          'Consumed / capita',
+          (s) =>
+            s.markets[0].population > 0
+              ? formatNumber(s.markets[0].goodsConsumed / s.markets[0].population)
+              : '0',
+        ],
+        ['Wealth concentration', (s) => `${s.markets[0].wealthConcentration.toFixed(0)}%`],
+      ],
+    },
+    {
+      // yield efficiency: captured vs full land potential over owned cells (this cycle)
+      title: 'Yield efficiency (cycle)',
+      rows: [
+        [
+          'Food yield (cap/util)',
+          (s) =>
+            `${formatNumber(s.markets[0].foodCaptured)} / ${formatNumber(s.markets[0].foodPotential)}`,
+        ],
+        [
+          'Food efficiency',
+          (s) =>
+            s.markets[0].foodPotential > 0
+              ? `${((s.markets[0].foodCaptured / s.markets[0].foodPotential) * 100).toFixed(0)}%`
+              : '0%',
+        ],
+        [
+          'Raw yield (cap/util)',
+          (s) =>
+            `${formatNumber(s.markets[0].rawCaptured)} / ${formatNumber(s.markets[0].rawPotential)}`,
+        ],
+        [
+          'Raw efficiency',
+          (s) =>
+            s.markets[0].rawPotential > 0
+              ? `${((s.markets[0].rawCaptured / s.markets[0].rawPotential) * 100).toFixed(0)}%`
+              : '0%',
+        ],
+      ],
+    },
+    {
+      // supply vs demand this turn (totals across the batched years)
+      title: 'Supply vs demand (turn)',
+      rows: [
+        [
+          'Food req / produced',
+          (s) =>
+            `${formatNumber(s.markets[0].foodNeededThisTurn)} / ${formatNumber(
+              s.markets[0].foodProducedThisTurn,
+            )}`,
+        ],
+        [
+          'Goods req / available',
+          (s) =>
+            `${formatNumber(s.markets[0].goodsNeededThisTurn)} / ${formatNumber(
+              s.markets[0].goodsAvailableThisTurn,
+            )}`,
+        ],
+      ],
+    },
+    {
+      // deaths split by cause
+      title: 'Deaths',
+      rows: [
+        [
+          'Food (turn)',
+          (s) => `${formatNumber(s.markets[0].foodDeathsThisTurn)} (\u03a3 ${formatNumber(
+            s.markets[0].foodDeathsTotal,
+          )})`,
+        ],
+        [
+          'Goods (turn)',
+          (s) => `${formatNumber(s.markets[0].goodsDeathsThisTurn)} (\u03a3 ${formatNumber(
+            s.markets[0].goodsDeathsTotal,
+          )})`,
+        ],
+        ['Total (turn)', (s) => formatNumber(s.markets[0].diedThisTurn)],
+        ['Cumulative', (s) => formatNumber(s.markets[0].cumulativeDead)],
+      ],
+    },
   ];
 
   let syncedPolicy = false;
@@ -480,10 +530,17 @@ export function mountSidebar(
           'On a new tech, spend 5\u00d7 the cycle\u2019s raw from reserves to burst-expand into fresh territory (banks if reserves are short).';
       }
 
-      stats.innerHTML = rowsSpec
+      stats.innerHTML = statGroups
         .map(
-          ([label, fn]) =>
-            `<div class="sm-row"><span>${label}</span><span>${fn(snap)}</span></div>`,
+          (g) =>
+            `<div class="sm-grp"><div class="sm-grp-h">${g.title}</div>` +
+            g.rows
+              .map(
+                ([label, fn]) =>
+                  `<div class="sm-row"><span>${label}</span><span>${fn(snap)}</span></div>`,
+              )
+              .join('') +
+            `</div>`,
         )
         .join('');
     },
