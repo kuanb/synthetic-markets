@@ -145,8 +145,8 @@ Reporting / state (all derived; persisted with the world):
 - **Yield efficiency**: per-cycle `foodPotentialThisCycle` / `rawPotentialThisCycle` accumulators
   expose captured-vs-potential food/raw in the sidebar.
 - **Snapshot ships more than markets[0]**: also `log` (full `YearLog[]` incl. `rawMined`,
-  `techInvested`, `population`, `wealthConcentration`), `events`, and `topMarkets` (the 5 largest
-  discovered+alive rival summaries). There is **no** `marketHue` array (only `cellHue`).
+  `techInvested`, `population`, `wealthConcentration`), `events`, and `topMarkets` (the "5 largest
+  markets" panel — the player + discovered+alive rivals). There is **no** `marketHue` array (only `cellHue`).
 
 Performance / scale:
 
@@ -160,7 +160,7 @@ UI / turns:
 
 - **Years-per-turn** is three discrete options (10 / 50 / 250); **four** zoom levels.
 - Map overlays: top-center **view-mode** selector, top-left **History** mini-charts (collapsible) +
-  **Other markets** panel, top-right **Chronicle** events feed. A **Settings** gear in the sidebar
+  **5 largest markets** panel (player + discovered rivals), top-right **Chronicle** events feed. A **Settings** gear in the sidebar
   opens a modal (board size / market & population density → New Game, About, **debug-log download**).
   A one-time **"best on desktop"** modal shows on viewports < 1500px wide.
 - `INIT` accepts optional `wildCellDensity` / `aiMarkets` overrides (Settings → New Game).

@@ -40,7 +40,7 @@ fixed deterministic order.
 
 **View modes** (top-center map overlay): Population/Markets, Food yield, Raw materials. Pan with
 arrow keys (or the on-screen pad); four zoom levels. Map overlays also show live **History**
-mini-charts and an **Other markets** panel (top-left) and a **Chronicle** of major events
+mini-charts and a **5 largest markets** panel (you + discovered rivals, top-left) and a **Chronicle** of major events
 (top-right). A **Settings** gear in the sidebar lets you start a new game with a different board
 size / market & population density, and download a debug log. Fog-of-war **sight grows with your
 technology** (whole map by the Satellites tech).

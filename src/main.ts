@@ -400,8 +400,8 @@ const marketsHead = document.createElement('div');
 marketsHead.style.cssText =
   'display:flex;justify-content:space-between;align-items:center;cursor:pointer;user-select:none;' +
   'color:#9aa;font-size:11px;letter-spacing:0.04em;text-transform:uppercase;';
-const marketsTitle = document.createElement('span');
-marketsTitle.textContent = 'Other markets';
+  const marketsTitle = document.createElement('span');
+  marketsTitle.textContent = `${CONFIG.OTHER_MARKETS_SHOWN} largest markets`;
 const marketsCaret = document.createElement('span');
 marketsCaret.style.cssText = 'color:#9aa;font-size:12px;';
 marketsHead.appendChild(marketsTitle);
@@ -416,7 +416,7 @@ function renderMarketsList(): void {
   marketsBody.innerHTML = '';
   if (lastTopMarkets.length === 0) {
     const empty = document.createElement('div');
-    empty.textContent = 'No other markets discovered';
+    empty.textContent = 'No markets';
     empty.style.cssText = 'color:#667;font-size:11px;';
     marketsBody.appendChild(empty);
     return;
@@ -429,8 +429,10 @@ function renderMarketsList(): void {
       m.colorHue,
     )},60%,55%);`;
     const name = document.createElement('span');
-    name.textContent = `Market #${m.id}`;
-    name.style.cssText = 'color:#cdd6e0;flex:1 1 auto;';
+    name.textContent = m.isPlayer ? 'You (player market)' : `Market #${m.id}`;
+    name.style.cssText = `flex:1 1 auto;color:${m.isPlayer ? '#fff' : '#cdd6e0'};${
+      m.isPlayer ? 'font-weight:600;' : ''
+    }`;
     const stat = document.createElement('span');
     stat.textContent = `${formatNumber(m.population)} pop \u00b7 ${formatNumber(m.cells)} cells`;
     stat.style.cssText = 'color:#9aa;flex:0 0 auto;';

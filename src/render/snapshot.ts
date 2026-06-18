@@ -59,9 +59,10 @@ export interface MarketSummary {
   famineTolerance: number;
 }
 
-// Lightweight summary of a discovered rival market for the "Other markets" panel.
+// Lightweight summary of a market for the "largest markets" panel (player + discovered rivals).
 export interface OtherMarketSummary {
   id: number;
+  isPlayer: boolean;
   colorHue: number;
   population: number;
   cells: number;
@@ -176,13 +177,14 @@ export function buildSnapshot(s: WorldState): Snapshot {
     famineTolerance: m.policy.famineTolerance,
   }));
 
-  // Largest DISCOVERED + ALIVE rival markets (respects fog-of-war: only encountered rivals).
+  // Largest ALIVE markets: the player (always shown) + DISCOVERED rivals (fog-of-war respected).
   const topMarkets: OtherMarketSummary[] = s.markets
-    .filter((m) => m.id >= 1 && m.population > 0 && s.encounteredMarkets.has(m.id))
+    .filter((m) => m.population > 0 && (m.id === 0 || s.encounteredMarkets.has(m.id)))
     .sort((a, b) => b.population - a.population || a.id - b.id)
     .slice(0, CONFIG.OTHER_MARKETS_SHOWN)
     .map((m) => ({
       id: m.id,
+      isPlayer: m.isPlayer,
       colorHue: m.colorHue,
       population: m.population,
       cells: m.cells.size,

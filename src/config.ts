@@ -137,7 +137,7 @@ export const CONFIG = {
   EVENT_ENCOUNTER_MILESTONES: [1, 3, 5, 10, 25, 50, 100, 250, 500], // rival-encounter count milestones
   EVENT_LOG_MAX: 500, // cap retained events (oldest dropped beyond this)
   // "Other markets" panel + rival-market chronicle events
-  OTHER_MARKETS_SHOWN: 5, // # of largest discovered+alive rival markets listed in the side panel
+  OTHER_MARKETS_SHOWN: 5, // # of largest alive markets in the side panel (player + discovered rivals)
   EVENT_MARKET_SWING_FRAC: 0.5, // single-year ±pop swing of a top-5 discovered market that logs an event
 
   // Wealth Concentration: the food-land the densest WEALTH_TOP_FRACTION of the population requires,

@@ -450,7 +450,7 @@ export interface Snapshot {
                                 //   yield efficiency, reserves/pendingBurst, famineTolerance, etc.
   log: YearLog[];               // full per-year player history (mini-charts; see §5.3 step 12)
   events: GameEvent[];          // historical-events feed for the Chronicle (§11)
-  topMarkets: OtherMarketSummary[]; // 5 largest DISCOVERED + alive rival markets (§11)
+  topMarkets: OtherMarketSummary[]; // 5 largest alive markets: player + discovered rivals (§11)
 }
 export function buildSnapshot(s: WorldState): Snapshot;
 ```
@@ -986,8 +986,8 @@ this section reconciles them. (`AGENTS.md` carries the same list as the operatio
 - **Yield efficiency** — per-cycle `foodPotentialThisCycle`/`rawPotentialThisCycle` accumulators on
   `Market` (captured-vs-potential food/raw in the sidebar).
 - **Snapshot ships more than markets[0]**: also `log` (full `YearLog[]` with `rawMined`,
-  `techInvested`, `population`, `wealthConcentration`), `events`, and `topMarkets` (5 largest
-  discovered+alive rivals). There is **no** `marketHue` (only `cellHue`).
+  `techInvested`, `population`, `wealthConcentration`),   `events`, and `topMarkets` (the "5 largest
+  markets" panel: the player + discovered+alive rivals). There is **no** `marketHue` (only `cellHue`).
 - `INIT` accepts optional `wildCellDensity` / `aiMarkets` overrides (Settings → New Game).
 
 **Performance / scale**
