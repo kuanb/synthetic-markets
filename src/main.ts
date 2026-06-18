@@ -147,6 +147,7 @@ const sidebar = mountSidebar(sidebarRoot, {
   },
   onRestart: startNewGame,
   onOpenSettings: openSettings,
+  onOpenHelp: openHelp,
 });
 
 function findPlayerCell(s: Snapshot): number {
@@ -688,6 +689,143 @@ function openSettings(): void {
     'Exports the chronicle + full per-year history (population, food, goods, tech, deaths) as JSON.';
   dlHint.style.cssText = 'color:#7d8590;font-size:11px;';
   card.appendChild(dlHint);
+
+  overlay.appendChild(card);
+  document.body.appendChild(overlay);
+}
+
+// ---- How to Play (question-mark icon, top-right of the sidebar header) -> modal ----
+// NOTE TO MAINTAINERS: if the game mechanics change meaningfully (policy levers, tech/yield
+// behavior, market interaction/conflict, forced intervention, win/loss/insurrection rules),
+// UPDATE HELP_SECTIONS below so this in-game guide stays accurate. (See AGENTS.md.)
+const HELP_SECTIONS: Array<{ h: string; body: string }> = [
+  {
+    h: 'The idea',
+    body:
+      'You run <b>exactly one market</b> in a living world of rival markets and wandering "wild" ' +
+      'people. You never command individuals \u2014 you set <b>policy</b> each turn and your ' +
+      'population responds: they are born, migrate toward food or raw materials, prosper, and ' +
+      'sometimes starve or revolt. The same world and the same choices always produce the same ' +
+      'result.',
+  },
+  {
+    h: 'Each turn',
+    body:
+      'Set your policy, choose how many years to run (<b>10 / 50 / 250</b>), then press ' +
+      '<b>End Turn</b> (or toggle <b>Auto-play</b>). Every batched year resolves in a fixed order. ' +
+      'There are four resources: <b>Food</b> (perishable \u2014 each person needs 1/year or risks ' +
+      'death), <b>Raw materials</b> (mined from the land; what you leave unmined banks in the ' +
+      'ground), <b>Goods</b> (manufactured from raw), and <b>Capital Wealth</b> (your goods pool, ' +
+      'which people consume from automatically and which decides conflicts).',
+  },
+  {
+    h: 'Your policy levers',
+    body:
+      '<b>Labor split</b> \u2014 divide workers between growing food and mining raw. ' +
+      '<b>Raw allocation</b> \u2014 split mined raw three ways: <b>Market</b> (\u2192 goods &amp; ' +
+      'wealth), <b>Tech</b> (\u2192 research), and <b>Reserves</b> (\u2192 a stockpile that funds ' +
+      'expansion). <b>Famine Tolerance</b> \u2014 how far people will chase raw before hunger ' +
+      'anchors them to the cells that feed them.',
+  },
+  {
+    h: 'Technology &amp; cell yields',
+    body:
+      'Pouring raw into <b>Tech</b> advances your technology level. Each level multiplies the ' +
+      '<b>goods you manufacture from every unit of mined raw</b> \u2014 the gains compound steeply, ' +
+      'so a high-tech market turns the same raw into vastly more wealth. <b>Food is deliberately ' +
+      'NOT boosted by tech</b>: a cell\u2019s food capacity stays tied to the land, so a growing ' +
+      'population must keep <b>spreading onto new cells</b> to feed itself. Technology also widens ' +
+      'your fog-of-war vision, eventually revealing the whole map.',
+  },
+  {
+    h: 'Other markets &amp; conflict',
+    body:
+      'Your people expand by migrating. Moving into <b>empty</b> land claims it; moving onto ' +
+      '<b>wild</b> people peacefully absorbs them into your market. A rival market\u2019s cell that ' +
+      'has been left <b>undefended</b> (no people on it) is taken freely. But stepping onto a ' +
+      'rival\u2019s <b>defended</b> cell can trigger <b>conflict</b> \u2014 more likely the more your ' +
+      'growth posture (\u201corientation\u201d) differs from theirs. The market with greater ' +
+      '<b>Capital Wealth</b> wins, taking the cell and converting everyone on it.',
+  },
+  {
+    h: 'Forced Intervention \u2014 Market Expansion',
+    body:
+      'A toggle. While it is ON, every time you <b>unlock a new technology</b> you queue a dramatic ' +
+      'territory <b>burst</b> costing <b>5\u00d7 that cycle\u2019s mined raw</b>, paid from your ' +
+      '<b>Reserves</b>. If reserves fall short the burst banks until you can afford it. When it ' +
+      'fires, it carves an <b>arm</b> of land from your border toward a raw-rich target, ending in ' +
+      'a <b>blob</b> of new territory. Unowned and wild cells are seized freely; a rival\u2019s ' +
+      'cells are taken <b>only where you out-tech that rival</b> \u2014 a more advanced market can ' +
+      'block the corridor entirely.',
+  },
+  {
+    h: 'Winning, losing &amp; insurrection',
+    body:
+      '<b>Win</b> by researching the <b>final technology</b>. <b>Lose</b> if your market drops to ' +
+      'zero people or loses its last cell (rivals being wiped out does NOT end the game). Beware ' +
+      '<b>inequality</b>: if wealth concentrates too heavily, you risk an <b>insurrection</b> that ' +
+      'violently shrinks your market \u2014 you will get warning cards first.',
+  },
+  {
+    h: 'Reading the map',
+    body:
+      'Switch <b>view modes</b> (top-center: Population / Food / Raw), pan with the arrow keys or ' +
+      'on-screen pad, and zoom 1\u00d7\u20134\u00d7. <b>Hover any cell</b> for exact numbers. The ' +
+      '<b>History</b> charts and <b>largest markets</b> panel (top-left) and the <b>Chronicle</b> of ' +
+      'major events (top-right) track how your world is unfolding.',
+  },
+];
+
+function openHelp(): void {
+  const overlay = document.createElement('div');
+  overlay.style.cssText =
+    'position:fixed;inset:0;z-index:1100;display:flex;align-items:flex-start;justify-content:center;' +
+    'overflow:auto;background:rgba(0,0,0,0.7);';
+  overlay.onclick = () => overlay.remove();
+  const card = document.createElement('div');
+  card.style.cssText =
+    'margin:5vh 20px;max-width:560px;width:100%;background:#0c0c0c;border:1px solid #2a2a2a;' +
+    'border-radius:8px;color:#dfe6ee;font:13px/1.6 ui-monospace,Menlo,monospace;' +
+    'box-shadow:0 6px 28px rgba(0,0,0,0.7);padding:20px 24px;';
+  card.onclick = (e) => e.stopPropagation();
+
+  const head = document.createElement('div');
+  head.style.cssText =
+    'display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;';
+  const h = document.createElement('div');
+  h.textContent = 'HOW TO PLAY';
+  h.style.cssText = 'font-size:15px;font-weight:600;letter-spacing:.1em;';
+  const close = document.createElement('button');
+  close.textContent = '\u00d7';
+  close.style.cssText =
+    'background:none;border:none;color:#9aa;font-size:22px;cursor:pointer;line-height:1;';
+  close.onclick = () => overlay.remove();
+  head.appendChild(h);
+  head.appendChild(close);
+  card.appendChild(head);
+
+  const sub = document.createElement('div');
+  sub.style.cssText = 'color:#7d8590;font-size:11px;margin-bottom:16px;';
+  sub.textContent = 'Synthetic Markets \u2014 a market that grows, reacts, and sometimes revolts.';
+  card.appendChild(sub);
+
+  for (const sec of HELP_SECTIONS) {
+    const sh = document.createElement('div');
+    sh.innerHTML = sec.h;
+    sh.style.cssText =
+      'color:#9ab;font-size:11px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;' +
+      'margin:14px 0 4px;';
+    card.appendChild(sh);
+    const p = document.createElement('div');
+    p.innerHTML = sec.body;
+    p.style.cssText = 'color:#bcc6d0;margin-bottom:4px;';
+    card.appendChild(p);
+  }
+
+  const foot = document.createElement('div');
+  foot.style.cssText = 'border-top:1px solid #1c1c1c;margin-top:16px;padding-top:10px;color:#667;font-size:11px;';
+  foot.textContent = 'Click anywhere outside this box to close.';
+  card.appendChild(foot);
 
   overlay.appendChild(card);
   document.body.appendChild(overlay);

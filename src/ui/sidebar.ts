@@ -22,6 +22,7 @@ export interface SidebarCallbacks {
   onAutoPlayChange(enabled: boolean): void;
   onRestart(): void;
   onOpenSettings(): void;
+  onOpenHelp(): void;
 }
 
 const css = `
@@ -153,14 +154,24 @@ export function mountSidebar(
     'display:flex;justify-content:space-between;align-items:center;margin:0 0 12px;';
   const title = el('h1', undefined, 'SYNTHETIC MARKETS');
   title.style.margin = '0';
-  const gear = el('button', undefined, '\u2699');
-  gear.title = 'Settings';
-  gear.style.cssText =
+  // Right-side button cluster: a How-to-Play help button (?) sits to the LEFT of the gear.
+  const headBtns = el('div');
+  headBtns.style.cssText = 'flex:0 0 auto;display:flex;gap:6px;align-items:center;';
+  const iconBtnCss =
     'flex:0 0 auto;width:30px;height:30px;background:#111;color:#ccc;border:1px solid #2a2a2a;' +
     'border-radius:4px;font-size:16px;line-height:1;cursor:pointer;';
+  const help = el('button', undefined, '?');
+  help.title = 'How to play';
+  help.style.cssText = iconBtnCss;
+  help.onclick = () => cb.onOpenHelp();
+  const gear = el('button', undefined, '\u2699');
+  gear.title = 'Settings';
+  gear.style.cssText = iconBtnCss;
   gear.onclick = () => cb.onOpenSettings();
+  headBtns.appendChild(help);
+  headBtns.appendChild(gear);
   header.appendChild(title);
-  header.appendChild(gear);
+  header.appendChild(headBtns);
   root.appendChild(header);
   // (View-mode selector now lives as a top-center overlay on the map, not in the sidebar.)
 

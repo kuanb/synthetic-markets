@@ -186,4 +186,9 @@ UI / turns:
    person pool to the main thread).
 6. Run `npm run typecheck && npm test && npm run build` before committing. Add/adjust invariant
    tests for new rules; keep the balance smoke test meaningful.
-7. Commit with the no-attribution author; deploy (GH Pages) is the terminal CI step off `main`.
+7. **Keep the in-game "How to Play" modal accurate.** If you meaningfully change player-facing
+   mechanics — the policy levers (labor / 3-way raw / famine tolerance), tech→yield behavior,
+   market interaction & conflict, Forced Intervention, or the win/loss/insurrection rules — update
+   `HELP_SECTIONS` in `src/main.ts` (the help "?" modal, opened from the sidebar header) so the
+   guide stays in sync. The player has no other tutorial.
+8. Commit with the no-attribution author; deploy (GH Pages) is the terminal CI step off `main`.
