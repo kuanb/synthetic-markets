@@ -23,23 +23,32 @@ npm run preview  # serve the production build
 
 ## How to play
 
-You control **exactly one market** (the player market). Each turn you set two policy sliders,
-optionally trigger a **Burst Spend** migration pulse, choose how many years to batch, then hit
-**End Turn**. The world resolves every batched year in a fixed deterministic order.
+You control **exactly one market** (the player market). Each turn you set policy, choose how many
+years to batch (10 / 50 / 250), then hit **End Turn**. The world resolves every batched year in a
+fixed deterministic order.
 
-- **Labor split** — food vs. raw materials. Mining less raw leaves it fallow (banked in the
-  ground as `rawStock` — an invasion target).
-- **Raw split** — research (advance technology) vs. market (manufacture goods → wealth).
-- People consume goods **automatically** from the market's capital pool; there is no
-  goods-to-people slider. Your "growth vs. restraint" posture is emergent, captured by
-  `orientation` (how hard you mine and accumulate), which drives conflict.
+- **Labor split** — food vs. raw mining. Mining less raw leaves it fallow (banked in the ground as
+  `rawStock` — an invasion target).
+- **Raw allocation** — a three-way split of mined raw: Market (→ goods/wealth), Tech (→ research),
+  Retain in reserves (→ the pool that funds Forced Intervention).
+- **Famine Tolerance** — how far people will chase raw before food anchors them in place.
+- **Forced Intervention — Market Expansion** (checkbox) — on a new tech, spend reserves to burst a
+  new arm + blob of territory into your market (it can only seize a rival's cells where you out-tech
+  them; unowned/wild land is taken freely).
+- People consume goods **automatically** from the capital pool; there is no goods-to-people slider.
+  Your "growth vs. restraint" posture is emergent, captured by `orientation`, which drives conflict.
 
-**View modes:** Peoples (population counts, colored by market), Food yield, Raw yield.
-Pan with arrow keys (or the on-screen pad on mobile); two zoom levels.
+**View modes** (top-center map overlay): Population/Markets, Food yield, Raw materials. Pan with
+arrow keys (or the on-screen pad); four zoom levels. Map overlays also show live **History**
+mini-charts and an **Other markets** panel (top-left) and a **Chronicle** of major events
+(top-right). A **Settings** gear in the sidebar lets you start a new game with a different board
+size / market & population density, and download a debug log. Fog-of-war **sight grows with your
+technology** (whole map by the Satellites tech).
 
 **Ends when** the player researches the final technology (win, after one more cycle) or the
-player market reaches zero population / zero cells (loss). Progress autosaves to
-`localStorage` once per turn.
+player market reaches zero population / zero cells (loss). The end-game card reports totals,
+per-year charts, and average **Wealth Concentration**. Progress autosaves to `localStorage`
+once per turn.
 
 ## Resource vocabulary (canonical — see `PLAN.md` §2)
 
@@ -53,10 +62,10 @@ player market reaches zero population / zero cells (loss). Progress autosaves to
 ```
 src/
   config.ts            all tunable constants + the 46-entry tech table
-  world/   rng, terrain (seeded noise), state (Land SoA + Person pool + worldgen)
-  sim/     tech, economy, agents, conflict, ai, tick (the spine)
+  world/   rng, terrain (seeded noise), state (Land SoA + Person pool + worldgen + events)
+  sim/     tech, economy, agents, conflict, ai, burst (territory burst), tick (the spine)
   render/  format, snapshot, viewport, canvas
-  ui/      sidebar, stats (end-game summary)
+  ui/      sidebar, charts (History mini-charts), stats (end-game summary)
   worker/  protocol, simWorker (owns authoritative state + RNG)
   persistence.ts       localStorage save/load
 ```
@@ -70,9 +79,9 @@ A few ambiguities were resolved with documented defaults (also noted inline in c
 
 - Only **market-owned** persons reproduce; wild persons only wander until absorbed (prevents
   unbounded wild-population growth with no death pressure).
-- Fog reveals only on the **player** market's movement; AI/wild movement does not lift fog.
-- Map defaults to 200×200 (tunable in `config.ts`; the design target is 800×800). Smaller is
-  friendlier to follow along during development.
+- Fog reveals only on the **player** market's vision (around its territory); AI/wild movement does
+  not lift fog. The sight radius **grows with technology** (full map by the Satellites tech).
+- Map defaults to **300×300** (tunable in `config.ts` / the Settings modal).
 - `TECH_MULTIPLIER=1.5` keeps `ext(45) ≈ 8.7e7` float-safe (2.0 would reproduce the `2^45`
   runaway and is intentionally avoided).
 

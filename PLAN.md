@@ -175,6 +175,8 @@ interface Policy {
   rawToTechFrac: number;      //  -> techProgress (research)
   rawToReserveFrac: number;   //  -> accumulates into Market.rawReserves (funds the tech-burst)
   forcedIntervention: boolean;// player-only: on a NEW tech, queue a territory-burst from reserves
+  famineTolerance: number;    // [0,1] migration-vs-famine: 0 Subsistence (anchor people to fed cells)
+                              //  .. 1 Prospecting (let them chase raw into starvation). See §11.
 }
 ```
 > **[DEFAULT] Three-way raw allocation (v3).** Replaces the original two-way research-vs-market
@@ -262,27 +264,36 @@ export const CONFIG = {
   // world gen — map default 300x300 (MAP_MIN_SIZE floor enforced at boot)
   WIDTH: 300, HEIGHT: 300, MAP_MIN_SIZE: 300, CELL_PX: 32,
   PLAYER_START_POP: 10, PLAYER_EDGE_MARGIN: 10,
-  // Market density: AI count is DERIVED -> floor(W*H / CELLS_PER_MARKET) - 1 (player). The
-  // "literal" target was 1:25 (~3600 markets on 300x300) but the discrete-agent sim made a
-  // 250-year batch take MINUTES; CELLS_PER_MARKET=900 (~100 markets) keeps it ~4.5s. (Tunable.)
-  CELLS_PER_MARKET: 900, AI_MARKET_COUNT: 4 /* legacy fallback */, AI_START_POP: 5,
-  // World density: ~WILD_CELL_DENSITY of cells seeded with WILD_CELL_MIN..MAX persons. Literal
-  // target ~0.5; default 0.1 for responsiveness (perf-bound by population, not cells). (Tunable.)
-  WILD_CELL_DENSITY: 0.1, WILD_CELL_MIN: 1, WILD_CELL_MAX: 3,
+  // Market density: AI count is DERIVED -> floor(W*H / CELLS_PER_MARKET) - 1 (player). After the
+  // hot path was made ~linear in (markets + live persons), density was pushed up an order of
+  // magnitude: CELLS_PER_MARKET=50 (~1800 markets on 300x300). The literal 1:25 (~3600) is
+  // reachable but makes the opening unplayable. (Tunable.)
+  CELLS_PER_MARKET: 50, AI_MARKET_COUNT: 4 /* legacy fallback */, AI_START_POP: 5,
+  // World density: ~WILD_CELL_DENSITY of cells seeded with WILD_CELL_MIN..MAX persons.
+  WILD_CELL_DENSITY: 0.35, WILD_CELL_MIN: 1, WILD_CELL_MAX: 3,
   // noise
   NOISE_OCTAVES: 4, NOISE_FREQUENCY: 0.012, NOISE_LACUNARITY: 2.0, NOISE_GAIN: 0.5,
   FOOD_YIELD_MAX: 10, RAW_YIELD_MAX: 10,
   // food floor: cells with noise >= FOOD_FLOOR_FBM (~85%) lifted to >=FOOD_YIELD_FLOOR (support 1)
   FOOD_YIELD_FLOOR: 1, FOOD_FLOOR_FBM: 0.30,
   // persons (homogeneous constants; each person shares these)
-  LABOR_CAPACITY: 2, MOBILITY: 1, BIRTH_RATE: 0.1, VIEW_RANGE: 1,
-  MAX_PERSONS: 80_000,               // global cap (discrete agents; every tick scans the pool O(N))
+  LABOR_CAPACITY: 2, MOBILITY: 1, BIRTH_RATE: 0.1,
+  VIEW_RANGE: 1,                     // per-person MOVEMENT search range (NOT map sight; see §11 vision)
+  VISION_BASE: 1, VISION_PER_LEVEL: 1,  // fog-of-war sight radius: grows with tech -> full map by Satellites
+  MAX_PERSONS: 250_000,              // global cap; per-tick cost ~linear in (markets + live pool)
   // policy defaults — three-way raw allocation (sum to 1); low tech share so tech is deliberate
-  LABOR_TO_FOOD_DEFAULT: 0.5,
+  LABOR_TO_FOOD_DEFAULT: 0.95,
   RAW_TO_MARKET_DEFAULT: 0.6, RAW_TO_TECH_DEFAULT: 0.1, RAW_RESERVE_DEFAULT: 0.3,
-  // Forced Intervention — Market Expansion (tech-triggered territory burst from rawReserves)
+  FAMINE_TOLERANCE_DEFAULT: 0.1,     // migration-vs-famine knob (§11); food-aware move damping:
+  MIN_MOVE_SCALE: 0.1, FOOD_ANCHOR_MARGIN: 0.25, FOOD_ANCHOR_BAND: 0.35,
+  // Forced Intervention — Market Expansion (tech-triggered territory burst from rawReserves;
+  // annexation is TECH-GATED vs rival markets — see §5.7/§11)
   BURST_RAW_COST_MULT: 5, BURST_MAX_RANGE: 250,
   ARM_WIDTH_MIN: 5, ARM_WIDTH_MAX: 20, TERMINUS_RADIUS_MIN: 15, TERMINUS_RADIUS_MAX: 35,
+  // historical-events feed + Wealth Concentration + "Other markets" panel (§11)
+  EVENT_DIEOFF_FRAC: 0.10, EVENT_BOOM_FRAC: 0.25, EVENT_MIN_POP_FOR_DELTA: 25,
+  EVENT_ENCOUNTER_MILESTONES: [1,3,5,10,25,50,100,250,500], EVENT_LOG_MAX: 500,
+  OTHER_MARKETS_SHOWN: 5, EVENT_MARKET_SWING_FRAC: 0.5, WEALTH_TOP_FRACTION: 0.1,
   // tech (v3: EXPENSIVE so advancing is a real choice; co-tuned with TECH_MULTIPLIER)
   TECH_MULTIPLIER: 1.5,              // ext(level) = TECH_MULTIPLIER ^ level   (RAW->GOODS only)
   FOOD_TECH_MULTIPLIER: 1.0,         // foodExt(level) = ^level; 1.0 = food land-limited (NOT ext)
@@ -432,11 +443,14 @@ export interface Snapshot {
   discovered: Uint8Array;
   marketId: Int32Array;
   cellPopulation: Int32Array;
-  cellHue: Int16Array;          // dominant owner hue per cell, -1 if none
+  cellHue: Int16Array;          // dominant owner hue per cell, -1 if none (there is NO marketHue)
   foodDisplay: Float32Array;    // foodYield * ext(owner techLevel) (discovered only)
   rawDisplay: Float32Array;     // rawYield + rawStock (discovered only)
-  marketHue: Int16Array;        // owning market hue per cell, -1 if unowned/undiscovered
-  markets: MarketSummary[];     // id, techLevel, techProgress, capitalWealth, population, orientation, etc.
+  markets: MarketSummary[];     // player summary only (markets[0]): + orientation, wealthConcentration,
+                                //   yield efficiency, reserves/pendingBurst, famineTolerance, etc.
+  log: YearLog[];               // full per-year player history (mini-charts; see §5.3 step 12)
+  events: GameEvent[];          // historical-events feed for the Chronicle (§11)
+  topMarkets: OtherMarketSummary[]; // 5 largest DISCOVERED + alive rival markets (§11)
 }
 export function buildSnapshot(s: WorldState): Snapshot;
 ```
@@ -549,15 +563,18 @@ banks in `rawStock` (invader "pay dirt").
 `tickBatch(state, rng, N)` calls `tick(state, rng)` up to **N times** (100-years-per-update
 resolves 100 real years). It stops early and returns `{over:true,...}` the moment a §6 end
 condition fires (so a win/loss mid-batch ends the run). Inside one `tick`, order is fixed and
-applies **per market** where noted. At tick start (step 0): `refreshDerived`, reset every
-per-cycle accumulator to 0, and (for AI markets) run `runAiPolicy` (§5.6).
+applies **per market** where noted. At tick start (step 0): reset every per-cycle accumulator to 0
+and (for AI markets) run `runAiPolicy` (§5.6). **[DELTA]** the per-tick `refreshDerived` was
+removed — `market.population` is maintained incrementally (births/deaths/`setPersonOwner` keep it
+exact); `createWorld`/`deserialize` still seed the caches. See §11.
 
 ```
 For each year (repeat up to N times):
-  0. PREP        refreshDerived; reset per-cycle accumulators
-                 (goodsProducedThisCycle, goodsConsumedThisCycle, rawToMarketThisCycle,
-                  rawToReserveThisCycle, bornThisYear, diedThisYear, foodThisYear) to 0;
+  0. PREP        reset per-cycle accumulators (goodsProducedThisCycle, goodsConsumedThisCycle,
+                  rawToMarketThisCycle, rawToReserveThisCycle, foodPotentialThisCycle,
+                  rawPotentialThisCycle, bornThisYear, diedThisYear, foodThisYear) to 0;
                  run AI policy (sim/ai.ts) for non-player markets.
+                 [DELTA] no per-tick refreshDerived — population is maintained incrementally (§11).
   1. TECH UNLOCK if techProgress >= researchCost(techLevel+1) and techLevel < max:
                     techProgress -= researchCost(techLevel+1); techLevel++.  (<=1 unlock/yr)
   2. BIRTHS      each LIVE person rolls individually: if rng.next() < BIRTH_RATE -> spawn ONE
@@ -607,8 +624,11 @@ For each year (repeat up to N times):
                     else propensity -= PROPENSITY_DECAY; then relax any burst component by
                     *BURST_DECAY; clamp to [0,1].
  11. CONFLICT    (already resolved inline in step 9; label kept for traceability.)
- 12. LOG         append per-year record {year, born, died, foodGenerated, goodsGenerated,
-                    capitalWealth} per market (ring buffer for the stats screen).
+ 12. LOG         append the PLAYER's per-year YearLog {year, born, died, food, goods, rawMined,
+                    techInvested, capitalWealth, population, wealthConcentration}. Discrete per-year
+                    events (tech, intervention, encounter milestones) are logged during the tick;
+                    magnitude-over-time events (population crash/boom, rival collapse/±50% swing)
+                    are computed PER TURN by the worker around tickBatch (§11), not here.
   year += 1
   // §6 END CHECK after the year: if player researched the FINAL tech this run, finish this
   // cycle then signal WIN; if player population == 0 or player owns 0 cells, signal LOSS.
@@ -694,9 +714,11 @@ it arms a dramatic, **tech-triggered** territory burst paid from the raw `rawRes
   the centroid. An **arm** (Bresenham corridor, random width `[ARM_WIDTH_MIN..MAX]=[5,20]`) runs
   from a random player **boundary** cell to the terminus, ending in an **irregular blob**
   (angle-wobbled radius `[TERMINUS_RADIUS_MIN..MAX]=[15,35]`).
-- **Annex (unconditional, no conflict rolls).** All arm+terminus cells become the player's:
-  `marketId=0`, added to the player's `cells` (removed from any prior owner), banked `rawStock`
-  travels with the cell, ALL persons on them (wild + enemy) convert to the player, fog revealed.
+- **Annex (TECH-GATED, no conflict rolls).** **[DELTA]** Unowned and wild cells in the arm+terminus
+  are taken freely; an ENEMY market's cell is seized **only when the player out-techs that market**
+  (`player.techLevel > owner.techLevel`) — otherwise that cell is left untouched. Seized cells
+  become the player's (`marketId=0`, added to `cells`, removed from prior owner), banked `rawStock`
+  travels with the cell, all persons on them (wild + enemy) convert to the player, fog revealed.
   Everything clamped to map bounds.
 
 (AI markets still use the legacy `burstSpend` propensity pulse for their own expansion, §5.6.)
@@ -920,3 +942,66 @@ Flagged smoke tests (report, do **not** fail CI):
 12. All `[TUNABLE]` values live in `config.ts`; large numbers render via `formatNumber` (K/M/B/T).
 13. Game ends: **win** at final tech +1 cycle; **loss** at player pop 0 / 0 cells; AI extinction does not end the game.
 14. Within a wave, develop in parallel but **commit serially** in listed order; deploy last.
+
+---
+
+## 11. Implementation deltas vs this spec  **[code is authoritative]**
+
+The shipped game has evolved past §§2–6. Where this spec and the code disagree, **the code wins**;
+this section reconciles them. (`AGENTS.md` carries the same list as the operational companion.)
+
+**Economy / policy**
+- **Three-way raw allocation** (market/tech/reserve, sum to 1) replaced the original two-way
+  research-vs-market split. Reserve raw banks in `Market.rawReserves` and lowers `orientation`.
+- **Food decoupled from tech** via `foodExt` (`FOOD_TECH_MULTIPLIER`, default 1.0) — food stays
+  land-limited so population must spread across cells (the spatial-expansion driver).
+- **Famine Tolerance** (`Policy.famineTolerance`, default 0.1) + **food-surplus migration damping**
+  (§5.4 addendum): as a market's food surplus tightens, propensity to MOVE is scaled toward
+  `MIN_MOVE_SCALE` (anchor `FOOD_ANCHOR_MARGIN`, ramp width `FOOD_ANCHOR_BAND`, shifted by
+  tolerance) so people stop abandoning the cells that feed them. Movement still consumes exactly
+  one `rng.next()` per person (only the threshold is scaled) → determinism/batch-equivalence hold.
+- Default labor split is **`LABOR_TO_FOOD_DEFAULT = 0.95`** (food-heavy), not 0.5.
+
+**Forced Intervention (§5.7)**
+- Player **policy checkbox** (renamed from "Burst Spend"), auto-applied each cycle while affordable;
+  cost `BURST_RAW_COST_MULT × cycle raw mined` from `rawReserves`, banks until funded.
+- **Annexation is tech-gated**: unowned/wild cells taken freely; a rival's cell only when the player
+  out-techs that market (`player.techLevel > owner.techLevel`).
+
+**Vision / fog**
+- **Sight grows with technology**: `revealPlayerVision` reveals the territory's bounding box expanded
+  by `visionRadius(techLevel)` (`VISION_BASE` + ramp to full map by the Satellites tech). `VIEW_RANGE`
+  (=1) is the *movement* search range — a separate concept.
+
+**Reporting / derived state (persisted with the world)**
+- **Historical events feed** — `WorldState.events: GameEvent[]` + `encounteredMarkets: Set`. Kinds:
+  epoch, tech, intervention, boom, dieoff, encounter, policy, market. Magnitude-over-time events
+  (player crash/boom; rival collapse/±50% swing) are computed **per turn** by the worker via
+  `captureTurnStart`/`logTurnEvents` around `tickBatch` (tagged with a year span) — *not* inside
+  `tick()`, so per-year batch-equivalence is preserved. Discrete events (tech/intervention/encounter/
+  policy) are logged inside `tick()`/`SET_POLICY`.
+- **Wealth Concentration** — `wealthConcentration(s, m)`: the food-land the 10% of population
+  (`WEALTH_TOP_FRACTION`) on the market's highest raw-yielding cells requires, as a % of total food
+  capacity. In `YearLog`, charted, and shown (as an average over the run) on the end-game card.
+- **Yield efficiency** — per-cycle `foodPotentialThisCycle`/`rawPotentialThisCycle` accumulators on
+  `Market` (captured-vs-potential food/raw in the sidebar).
+- **Snapshot ships more than markets[0]**: also `log` (full `YearLog[]` with `rawMined`,
+  `techInvested`, `population`, `wealthConcentration`), `events`, and `topMarkets` (5 largest
+  discovered+alive rivals). There is **no** `marketHue` (only `cellHue`).
+- `INIT` accepts optional `wildCellDensity` / `aiMarkets` overrides (Settings → New Game).
+
+**Performance / scale**
+- Hot path made ~linear in (markets + live persons): removed the per-tick full-pool `refreshDerived`
+  (population maintained incrementally) and made `burstSpend` walk only the market's cells. This let
+  density rise an order of magnitude: `CELLS_PER_MARKET = 50` (~1800 markets), `WILD_CELL_DENSITY =
+  0.35`, `MAX_PERSONS = 250_000`.
+
+**New modules**: `sim/burst.ts` (burst geometry + tech-gated annex), `ui/charts.ts` (top-left
+History mini-charts).
+
+**UI (§6 addenda)**: four zoom levels; map overlays for view modes (top-center), History charts +
+Other-markets panel (top-left, collapsible), and the Chronicle events feed (top-right, pinned title).
+A **Settings** gear in the sidebar opens a modal (board size / market & population density → New
+Game; About; **debug-log download**). A one-time **"best on desktop"** modal shows on viewports
+< 1500px wide. The "Raw allocation" box is labeled "Raw materials allocation" and the History panel
+shows six charts (incl. Wealth concentration), plotting the trailing 1000 years (no scroll).

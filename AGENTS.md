@@ -49,7 +49,10 @@ Keep `typecheck`, `test`, and `build` green at all times.
   named constant here and reference it.
 - **Discrete-person model.** Population is a count of individual `Person` records; births,
   movement, starvation, conflict, and absorption all operate on individual records. `MAX_PERSONS`
-  bounds the pool (every tick scans it O(N)); raise it only with an eye on per-turn latency.
+  (currently `250_000`) bounds the pool. The per-tick cost is ~linear in (markets + live persons):
+  several passes (births, movement, propensity) scan the live pool, but the old per-tick full-pool
+  `refreshDerived` and the per-market full-pool burst scan were removed (see the perf divergence
+  note below), so `population` is now maintained incrementally, not recomputed each tick.
 - **The worker owns authoritative state.** No `Math.random()` anywhere that affects simulation
   state — all randomness flows through the seeded `RNG` (`src/world/rng.ts`), forked per
   subsystem per year for determinism. Same seed + same inputs ⇒ byte-identical run.
@@ -66,25 +69,28 @@ src/
     terrain.ts         seeded autocorrelated value-noise -> foodYield / rawYield
     state.ts           WorldState, Market, Policy, Person SoA pool, accessors, (de)serialize, world gen
   sim/
-    tech.ts            ext() [raw->goods], foodExt() [land-limited food], researchCost(), maxTechLevel()
-    economy.ts         production, 3-way raw disposition, goods accrual, auto-consumption, deaths, burstSpend
-    agents.ts          births, per-person movement target selection, propensity updates
+    tech.ts            ext() [raw->goods], foodExt() [land-limited food], researchCost(), maxTechLevel(), visionRadius()
+    economy.ts         production (+ yield potentials), 3-way raw disposition, goods accrual, auto-consumption, deaths, burstSpend
+    agents.ts          births, per-person movement target selection (+ food-surplus move damping), propensity updates
     conflict.ts        movement resolution: fog reveal, wild absorption, market-vs-market conflict
     ai.ts              fixed-policy controller for non-player markets
-    tick.ts            THE SPINE: tick() resolves one year in §5.3 order; tickBatch() + win/loss
+    burst.ts           Forced-Intervention territory burst geometry (arm + terminus blob); tech-gated annexation
+    tick.ts            THE SPINE: tick() resolves one year in §5.3 order; tickBatch(); captureTurnStart()/logTurnEvents() (per-turn events) + win/loss
   render/
     format.ts          formatCell (compact in-cell) + formatNumber (K/M/B/T)
-    snapshot.ts        buildSnapshot(): derive render-facing per-cell arrays + market summaries
-    viewport.ts        pan/zoom state + culling
+    snapshot.ts        buildSnapshot(): per-cell arrays + player summary + log + events + top rival markets
+    viewport.ts        pan/zoom state + culling (4 zoom levels)
     canvas.ts          draw(): black bg, wireframe, text-only cells, overflow-proof labels, view modes
   ui/
-    sidebar.ts         view toggle, Policy (labor + 3-way raw + forced-intervention), years (3 options), stats
-    stats.ts           end-game win/loss summary overlay + per-year charts
+    sidebar.ts         Policy (labor + 3-way raw + Famine Tolerance + forced-intervention), years (3 options), Settings gear, live stats
+    charts.ts          top-left "History · per year" live mini-charts (hover tooltip; collapsible)
+    stats.ts           end-game win/loss summary overlay + per-year charts (incl. wealth concentration)
   worker/
     protocol.ts        typed ToWorker / FromWorker message contract
     simWorker.ts       owns WorldState + master RNG; INIT/LOAD/SET_POLICY/TICK/SAVE; emits SNAPSHOT/GAME_OVER
   persistence.ts       localStorage save/load (base64)
-  main.ts              bootstrap: spawn worker, wire canvas + sidebar + input + zoom + hover tooltip
+  main.ts              bootstrap: worker + canvas + sidebar + input + zoom; map overlays (view modes,
+                       History charts, Chronicle events, Other markets), Settings modal, desktop hint
 tests/
   sim.test.ts          economic invariants, determinism, batch-equivalence, safety net
   balance.test.ts      balance smoke (survival / spatial expansion / starvation), reported + asserted
@@ -92,21 +98,72 @@ tests/
 
 ## How the live code intentionally diverges from / extends PLAN.md
 
-The shipped sim has evolved past the original spec in a few **documented** ways (see
-`agents/history/`):
+The shipped sim has evolved well past the original spec. The list below is the **authoritative
+reconciliation** — where `PLAN.md` and the code disagree, the code wins and this list explains why.
+(`PLAN.md §11` carries the same delta list.)
 
-- **Raw policy is three-way** (`rawToMarketFrac` / `rawToTechFrac` / `rawUnminedFrac`, summing
-  to 1) rather than the two-way research-vs-market split in `PLAN.md` §6. Leaving raw unmined
-  banks it in `rawStock` and lowers `orientation`.
+Economy / policy:
+
+- **Raw policy is three-way** (`rawToMarketFrac` / `rawToTechFrac` / `rawToReserveFrac`, summing
+  to 1) rather than the two-way research-vs-market split in the original `PLAN.md` §6. Reserve raw
+  banks in `Market.rawReserves` (funds the burst) and lowers `orientation`.
 - **Food is decoupled from tech.** `ext` (raw→goods) grows at `TECH_MULTIPLIER`; food uses a
   separate, much weaker `foodExt` (`FOOD_TECH_MULTIPLIER`, default 1.0) so a cell's food
   carrying capacity stays land-limited and population growth must spread across cells.
-- **Early-game safety net**: the player cannot be driven below `PLAYER_SAFE_FLOOR` during the
-  first `PLAYER_SAFE_YEARS`; AI and wild persons are never protected. Eventual collapse remains
-  possible afterward.
-- **Forced Intervention** (the renamed Burst Spend) is a **player policy checkbox** auto-applied
-  each cycle while affordable, not a one-shot button.
-- **Years-per-turn** is three discrete options (10 / 50 / 250).
+- **Famine Tolerance** (`Policy.famineTolerance`, default `0.1`) + **food-surplus migration
+  damping**: when a market's food surplus tightens, propensity to MOVE is scaled toward
+  `MIN_MOVE_SCALE` (anchored by `FOOD_ANCHOR_MARGIN`/`FOOD_ANCHOR_BAND`, shifted by tolerance) so
+  people stop abandoning the cells that feed them. (Movement keeps exactly one `rng.next()` per
+  person — the threshold is only scaled — so determinism/batch-equivalence hold.)
+- **Default labor split** is `LABOR_TO_FOOD_DEFAULT = 0.95` (food-heavy), not the spec's `0.5`.
+
+Forced Intervention / burst (`PLAN.md §5.7`):
+
+- It is a **player policy checkbox** (renamed from "Burst Spend"), auto-applied each cycle while
+  affordable, not a one-shot button. Cost = `BURST_RAW_COST_MULT × cycle raw mined`, paid from
+  `rawReserves`; banks until reserves suffice.
+- **Annexation is tech-gated, not unconditional**: unowned/wild cells are taken freely, but an
+  enemy market's cell is only seized when the player out-techs that market.
+
+Vision / fog:
+
+- **Sight grows with technology.** `revealPlayerVision` reveals the player territory's bounding box
+  expanded by `visionRadius(techLevel)` (`VISION_BASE` + ramp to full-map by the Satellites tech),
+  not a fixed 1-cell ring. `VIEW_RANGE` (=1) is the *movement* search range, a separate concept.
+
+Reporting / state (all derived; persisted with the world):
+
+- **Historical events feed** (`WorldState.events: GameEvent[]`, `encounteredMarkets: Set`): epoch,
+  tech discovered, forced intervention, population boom/crash, rival-market collapse/swing, rival
+  encounters, allocation changes. Magnitude-over-time events (player crash/boom, rival
+  collapse/±50% swing) are computed **per turn** by the worker (`captureTurnStart`/`logTurnEvents`
+  around `tickBatch`), tagged with a year span — *not* inside `tick()`, so per-year
+  batch-equivalence is preserved.
+- **Wealth Concentration** (`wealthConcentration`): food-land the 10% of population on the highest
+  raw-yielding cells requires, as a % of total food capacity (`WEALTH_TOP_FRACTION`). Tracked in
+  `YearLog`, charted, and reported (as an average) on the end-game card.
+- **Yield efficiency**: per-cycle `foodPotentialThisCycle` / `rawPotentialThisCycle` accumulators
+  expose captured-vs-potential food/raw in the sidebar.
+- **Snapshot ships more than markets[0]**: also `log` (full `YearLog[]` incl. `rawMined`,
+  `techInvested`, `population`, `wealthConcentration`), `events`, and `topMarkets` (the 5 largest
+  discovered+alive rival summaries). There is **no** `marketHue` array (only `cellHue`).
+
+Performance / scale:
+
+- **Density pushed up an order of magnitude** after the hot path was made ~linear in
+  (markets + live persons): `CELLS_PER_MARKET = 50` (~1800 markets on 300×300, was 900/~100),
+  `WILD_CELL_DENSITY = 0.35` (was 0.10), `MAX_PERSONS = 250_000` (was 80k). The two big wins:
+  removing the per-tick full-pool `refreshDerived` (population is maintained incrementally) and
+  making `burstSpend` walk only the market's cells.
+
+UI / turns:
+
+- **Years-per-turn** is three discrete options (10 / 50 / 250); **four** zoom levels.
+- Map overlays: top-center **view-mode** selector, top-left **History** mini-charts (collapsible) +
+  **Other markets** panel, top-right **Chronicle** events feed. A **Settings** gear in the sidebar
+  opens a modal (board size / market & population density → New Game, About, **debug-log download**).
+  A one-time **"best on desktop"** modal shows on viewports < 1500px wide.
+- `INIT` accepts optional `wildCellDensity` / `aiMarkets` overrides (Settings → New Game).
 
 ## How to safely extend the simulation
 
