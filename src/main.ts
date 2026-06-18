@@ -186,7 +186,7 @@ worker.onmessage = (e: MessageEvent<FromWorker>) => {
         autoPlay = false;
         clearTimeout(autoTimer);
         sidebar.setAutoPlay(false);
-        showSummary(app, msg.outcome, lastSaved?.log ?? []);
+        showSummary(app, msg.outcome, lastSaved?.log ?? [], downloadDebugLog);
       } else {
         scheduleAuto();
       }

@@ -115,7 +115,12 @@ function lineChart(
   return c;
 }
 
-export function showSummary(root: HTMLElement, outcome: 'win' | 'loss', log: YearLog[]): void {
+export function showSummary(
+  root: HTMLElement,
+  outcome: 'win' | 'loss',
+  log: YearLog[],
+  onDownloadLog?: () => void,
+): void {
   const totalBorn = log.reduce((a, l) => a + l.born, 0);
   const totalDead = log.reduce((a, l) => a + l.died, 0);
   const totalFood = log.reduce((a, l) => a + l.food, 0);
@@ -253,6 +258,21 @@ export function showSummary(root: HTMLElement, outcome: 'win' | 'loss', log: Yea
     location.reload();
   };
   card.appendChild(again);
+
+  // Download the full game history (same JSON export as the Settings modal) before starting over.
+  if (onDownloadLog) {
+    const dl = document.createElement('button');
+    dl.textContent = 'Download history log (JSON)';
+    dl.style.cssText = `margin-top:8px;width:100%;padding:10px;background:#111;color:#ccc;
+      border:1px solid #2a2a2a;border-radius:3px;font:inherit;cursor:pointer;`;
+    dl.onclick = onDownloadLog;
+    card.appendChild(dl);
+    const dlHint = document.createElement('div');
+    dlHint.textContent =
+      'Exports the chronicle + full per-year history (population, food, goods, tech, deaths) as JSON.';
+    dlHint.style.cssText = 'color:#667;font-size:11px;margin-top:6px;';
+    card.appendChild(dlHint);
+  }
   overlay.appendChild(card);
   root.appendChild(overlay);
 }
