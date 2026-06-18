@@ -473,6 +473,8 @@ const EVENT_COLOR: Record<string, string> = {
   encounter: '#7fd6d6',
   policy: '#9fb0c0',
   market: '#b0c4d4',
+  warning: '#e6c86f',
+  insurrection: '#e66f6f',
 };
 // Outer box does NOT scroll; the title stays fixed and only the event list scrolls beneath it.
 const chronicleWrap = document.createElement('div');
@@ -708,18 +710,20 @@ function renderChronicle(events: Snapshot['events']): void {
   chronicleList.scrollTop = chronicleList.scrollHeight;
 }
 
-// Transient "alert card" for Forced-Intervention events: slides in at top-center, auto-dismisses.
+// Transient "alert card" for major events (Forced Intervention, insurrection warnings/collapse):
+// slides in at top-center, auto-dismisses. The accent color is set per event.
 const alertCard = document.createElement('div');
 alertCard.style.cssText =
   'position:absolute;top:58px;left:50%;transform:translateX(-50%) translateY(-8px);' +
   'max-width:70%;display:none;opacity:0;transition:opacity 0.25s, transform 0.25s;z-index:30;' +
-  'background:rgba(40,28,8,0.96);border:1px solid #e6b87f;border-radius:6px;padding:10px 14px;' +
-  'color:#f0dcb8;font:13px ui-monospace,Menlo,monospace;line-height:1.4;text-align:center;' +
+  'background:rgba(20,14,10,0.96);border:1px solid #e6b87f;border-radius:6px;padding:10px 14px;' +
+  'color:#f0e6da;font:13px ui-monospace,Menlo,monospace;line-height:1.4;text-align:center;' +
   'box-shadow:0 4px 18px rgba(0,0,0,0.6);';
 stage.appendChild(alertCard);
 let alertTimer: ReturnType<typeof setTimeout> | undefined;
-function showAlert(text: string): void {
-  alertCard.innerHTML = `<b style="color:#ffd9a0">\u26a1 Forced Intervention</b><br/>${text}`;
+function showAlert(html: string, accent: string): void {
+  alertCard.style.borderColor = accent;
+  alertCard.innerHTML = html;
   alertCard.style.display = 'block';
   // next frame: fade/slide in
   requestAnimationFrame(() => {
@@ -731,7 +735,18 @@ function showAlert(text: string): void {
     alertCard.style.opacity = '0';
     alertCard.style.transform = 'translateX(-50%) translateY(-8px)';
     setTimeout(() => (alertCard.style.display = 'none'), 300);
-  }, 6000);
+  }, 6500);
+}
+
+// Map an alertable event to a card (title + accent). Higher priority = more important.
+function eventCard(kind: string, text: string): { html: string; accent: string; pri: number } | null {
+  if (kind === 'insurrection')
+    return { html: `<b style="color:#ff9a9a">\u2691 Insurrection</b><br/>${text}`, accent: '#e66f6f', pri: 3 };
+  if (kind === 'intervention')
+    return { html: `<b style="color:#ffd9a0">\u26a1 Forced Intervention</b><br/>${text}`, accent: '#e6b87f', pri: 2 };
+  if (kind === 'warning')
+    return { html: `<b style="color:#ffe28a">\u26a0 Warning</b><br/>${text}`, accent: '#e6c86f', pri: 1 };
+  return null;
 }
 
 // Track how many events we've already shown so new ones can trigger the transient alert. -1 means
@@ -746,11 +761,13 @@ function updateEvents(snap: Snapshot): void {
     return;
   }
   if (events.length > lastEventCount) {
-    let latestIntervention: string | null = null;
+    // Show the highest-priority new alertable event (insurrection > intervention > warning).
+    let best: { html: string; accent: string; pri: number } | null = null;
     for (let i = lastEventCount; i < events.length; i++) {
-      if (events[i].kind === 'intervention') latestIntervention = events[i].text;
+      const c = eventCard(events[i].kind, events[i].text);
+      if (c && (!best || c.pri >= best.pri)) best = c;
     }
-    if (latestIntervention) showAlert(latestIntervention);
+    if (best) showAlert(best.html, best.accent);
   }
   lastEventCount = events.length;
 }

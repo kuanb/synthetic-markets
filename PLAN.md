@@ -985,9 +985,19 @@ this section reconciles them. (`AGENTS.md` carries the same list as the operatio
   `captureTurnStart`/`logTurnEvents` around `tickBatch` (tagged with a year span) — *not* inside
   `tick()`, so per-year batch-equivalence is preserved. Discrete events (tech/intervention/encounter/
   policy) are logged inside `tick()`/`SET_POLICY`.
-- **Wealth Concentration** — `wealthConcentration(s, m)`: the food-land the 10% of population
-  (`WEALTH_TOP_FRACTION`) on the market's highest raw-yielding cells requires, as a % of total food
-  capacity. In `YearLog`, charted, and shown (as an average over the run) on the end-game card.
+- **Wealth Concentration** — `wealthConcentration(s, m)`: a top-decile (Gini-style) **wealth share**
+  in [0,100] — the share of the market's wealth held by its wealthiest `WEALTH_TOP_FRACTION` (10%)
+  of the population (per-cell wealth = `rawYield + rawStock`; people ranked by per-capita wealth,
+  pro-rating the cell that crosses the 10% mark). ~10% when even, →100% when a few hold most of the
+  raw-rich land. In `YearLog`, charted, and shown (as a run average) on the end-game card.
+- **Insurrection** — when Wealth Concentration is high the player's market risks collapse. Per year,
+  if concentration ≥ `INSURRECTION_THRESHOLD` (75%), a roll (prob linearly interpolated from
+  `INSURRECTION_PROB_AT_THRESHOLD` 1% at 75% to `INSURRECTION_PROB_AT_MAX` 95% at 100%) may fire an
+  **insurrection**: the market contracts, losing `INSURRECTION_CONTRACT_MIN..MAX` (50–85%, random) of
+  its cells — keeping the **top population centers**, shedding the sparse periphery (and its people);
+  the dense survivors, now on a smaller food base, risk a follow-on starvation collapse. Warning
+  cards fire on each upward crossing of a `INSURRECTION_WARN_STEP` boundary from `INSURRECTION_WARN_FROM`
+  (55%). Player-only; deterministic (`RNG_SALT.INSURRECTION`). Events: `warning`, `insurrection`.
 - **Yield efficiency** — per-cycle `foodPotentialThisCycle`/`rawPotentialThisCycle` accumulators on
   `Market` (captured-vs-potential food/raw in the sidebar).
 - **Snapshot ships more than markets[0]**: also `log` (full `YearLog[]` with `rawMined`,

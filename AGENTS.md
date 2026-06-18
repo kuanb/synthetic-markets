@@ -139,9 +139,16 @@ Reporting / state (all derived; persisted with the world):
   collapse/±50% swing) are computed **per turn** by the worker (`captureTurnStart`/`logTurnEvents`
   around `tickBatch`), tagged with a year span — *not* inside `tick()`, so per-year
   batch-equivalence is preserved.
-- **Wealth Concentration** (`wealthConcentration`): food-land the 10% of population on the highest
-  raw-yielding cells requires, as a % of total food capacity (`WEALTH_TOP_FRACTION`). Tracked in
-  `YearLog`, charted, and reported (as an average) on the end-game card.
+- **Wealth Concentration** (`wealthConcentration`): a top-decile (Gini-style) wealth SHARE in
+  [0,100] — the share of the market's wealth (per-cell `rawYield+rawStock`) held by its wealthiest
+  `WEALTH_TOP_FRACTION` (10%) of the population. ~10% when even, →100% when concentrated. Tracked in
+  `YearLog`, charted, reported (as a run average) on the end-game card.
+- **Insurrection** (player-only, `RNG_SALT.INSURRECTION`): high Wealth Concentration risks collapse.
+  Per year ≥ `INSURRECTION_THRESHOLD` (75%) a roll (1%@75% → 95%@100%, linear) may contract the
+  market by `INSURRECTION_CONTRACT_MIN..MAX` (50–85%) of cells, keeping the top population centers
+  and shedding the periphery (its people lost; survivors risk a food-driven follow-on collapse).
+  Warning cards on each `INSURRECTION_WARN_STEP` crossing from `INSURRECTION_WARN_FROM` (55%). Events:
+  `warning`, `insurrection` (both also pop a transient alert card).
 - **Yield efficiency**: per-cycle `foodPotentialThisCycle` / `rawPotentialThisCycle` accumulators
   expose captured-vs-potential food/raw in the sidebar.
 - **Snapshot ships more than markets[0]**: also `log` (full `YearLog[]` incl. `rawMined`,

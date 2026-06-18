@@ -5,6 +5,7 @@ import type { RNG } from '../world/rng';
 import {
   type Market,
   type WorldState,
+  killPerson,
   logEvent,
   revealPlayerVision,
   wealthConcentration,
@@ -54,6 +55,35 @@ function topDiscoveredRivals(s: WorldState, k: number): Array<{ id: number; pop:
   return out.slice(0, k);
 }
 
+// Insurrection contraction: the market loses CONTRACT_MIN..MAX of its cells, keeping the TOP
+// population centers (the densest cells) and shedding the sparse periphery. Persons on shed cells
+// are lost; the surviving dense core, now with a smaller food base, risks a follow-on food
+// collapse via the normal starvation mechanic. Returns {removed cells, killed persons}.
+function insurrectionContract(s: WorldState, player: Market, rng: RNG): { removed: number; killed: number } {
+  const cells = [...player.cells];
+  cells.sort((a, b) => s.cellPopulation[b] - s.cellPopulation[a]); // densest (top pop centers) first
+  const frac =
+    CONFIG.INSURRECTION_CONTRACT_MIN +
+    rng.next() * (CONFIG.INSURRECTION_CONTRACT_MAX - CONFIG.INSURRECTION_CONTRACT_MIN);
+  const removeCount = Math.min(cells.length - 1, Math.floor(cells.length * frac)); // keep >= 1 cell
+  let killed = 0;
+  for (let i = cells.length - removeCount; i < cells.length; i++) {
+    const c = cells[i];
+    for (let q = s.cellHead[c]; q !== -1; ) {
+      const next = s.personNext[q];
+      if (s.personOwner[q] === player.id) {
+        killPerson(s, q);
+        killed++;
+      }
+      q = next;
+    }
+    player.cells.delete(c);
+    s.marketId[c] = -1;
+  }
+  player.population -= killed;
+  return { removed: removeCount, killed };
+}
+
 function techUnlock(s: WorldState, m: Market): void {
   const max = maxTechLevel();
   if (m.techLevel >= max) return;
@@ -75,6 +105,7 @@ export function tick(state: WorldState, rng: RNG): void {
   const rngMove = rng.fork(RNG_SALT.MOVEMENT + y);
   const rngConflict = rng.fork(RNG_SALT.CONFLICT + y);
   const rngBurst = rng.fork(RNG_SALT.BURST + y);
+  const rngInsurrection = rng.fork(RNG_SALT.INSURRECTION + y);
 
   // Step 0: prep. Market populations are maintained EXACTLY and incrementally (births ++, deaths
   // -=, setPersonOwner ±), so we no longer recompute them with a full O(capacity) pool scan every
@@ -160,10 +191,51 @@ export function tick(state: WorldState, rng: RNG): void {
   // Step 10: propensity.
   updatePropensity(state, deficitCells);
 
+  // Insurrection (player only, per year): when Wealth Concentration is high, the market risks
+  // collapse. Warning cards on each upward crossing of a WARN_STEP boundary; an insurrection roll
+  // (prob interpolated from THRESHOLD->100%) contracts the market toward its top population centers.
+  let logConc = wealthConcentration(state, player);
+  if (player.isPlayer) {
+    const prevConc = state.log.length ? state.log[state.log.length - 1].wealthConcentration : 0;
+    // One warning per year for the HIGHEST WARN_STEP boundary newly crossed upward (a jump across
+    // several boundaries in one year warns once, not once per boundary).
+    let crossed = 0;
+    for (
+      let t = CONFIG.INSURRECTION_WARN_FROM;
+      t <= CONFIG.INSURRECTION_THRESHOLD;
+      t += CONFIG.INSURRECTION_WARN_STEP
+    ) {
+      if (logConc >= t && prevConc < t) crossed = t;
+    }
+    if (crossed > 0) {
+      logEvent(
+        state,
+        'warning',
+        `Wealth concentration ${logConc.toFixed(0)}% (past ${crossed}%) \u2014 insurrection risk rising`,
+      );
+    }
+    if (logConc >= CONFIG.INSURRECTION_THRESHOLD) {
+      const span = 100 - CONFIG.INSURRECTION_THRESHOLD;
+      const frac = Math.max(0, Math.min(1, (logConc - CONFIG.INSURRECTION_THRESHOLD) / span));
+      const prob =
+        CONFIG.INSURRECTION_PROB_AT_THRESHOLD +
+        frac * (CONFIG.INSURRECTION_PROB_AT_MAX - CONFIG.INSURRECTION_PROB_AT_THRESHOLD);
+      if (rngInsurrection.next() < prob) {
+        const popBefore = player.population;
+        const { removed, killed } = insurrectionContract(state, player, rngInsurrection);
+        logEvent(
+          state,
+          'insurrection',
+          `Insurrection! Wealth ${logConc.toFixed(0)}% concentrated \u2014 market contracts: lost ${removed} cells, ${formatNumber(killed)} people (pop ${formatNumber(popBefore)}\u2192${formatNumber(player.population)})`,
+        );
+        logConc = wealthConcentration(state, player); // recompute for the post-contraction log
+      }
+    }
+  }
+
   // NOTE: magnitude-over-time events (player population crash/boom, rival-market collapse/swing) are
   // detected PER TURN (the batch of years), not per year — see captureTurnStart/logTurnEvents below,
-  // invoked by the worker around tickBatch. A 99% collapse spread over a 250-year turn would only
-  // ever surface as many tiny per-year drops if computed here.
+  // invoked by the worker around tickBatch.
 
   // Step 12: log player aggregate.
   state.log.push({
@@ -176,7 +248,7 @@ export function tick(state: WorldState, rng: RNG): void {
     techInvested: player.techInvestedThisYear,
     capitalWealth: player.capitalWealth,
     population: player.population,
-    wealthConcentration: wealthConcentration(state, player),
+    wealthConcentration: logConc,
   });
 
   state.year++;

@@ -92,7 +92,9 @@ export type EventKind =
   | 'dieoff' // a large single-year population loss
   | 'encounter' // a rival-market encounter milestone was reached
   | 'policy' // the player changed their allocation policy
-  | 'market'; // a top-5 discovered rival market collapsed or swung ±50% in a year
+  | 'market' // a top-5 discovered rival market collapsed or swung ±50% in a year
+  | 'warning' // wealth concentration crossed a warning threshold (insurrection risk rising)
+  | 'insurrection'; // wealth too concentrated -> insurrection collapsed/contracted the market
 
 export interface GameEvent {
   year: number;
@@ -271,32 +273,43 @@ export function orientation(m: Market): number {
   return m.rawToMarketThisCycle / denom;
 }
 
-// Wealth Concentration (%): the food-land required to support the WEALTH_TOP_FRACTION (10%) of the
-// population residing on the market's HIGHEST raw-yielding cells, expressed as a percentage of the
-// market's total food capacity (foodPotentialThisCycle = Σ foodYield*foodExt over owned cells).
+// Wealth Concentration (%): the share of the market's wealth held by its wealthiest
+// WEALTH_TOP_FRACTION (10%) of the population — a top-decile (Gini-style) wealth share in [0,100].
 //
-// People who pile onto prime raw cells (food-poor, raw-focused) must be fed from elsewhere; the
-// more of them and the denser their clusters, the larger the food hinterland they require. We rank
-// the market's POPULATED cells by raw yield and accumulate whole cells until they hold 10% of the
-// population, then express that population's food need (1 food/person) as a share of total food
-// capacity. ~10% when balanced; >100% means even that raw elite couldn't be fed by all the land.
+// There is no per-person wealth pool, so a cell's "wealth" is its raw-generating land
+// (rawYield + rawStock — raw is the source of goods/capital). People are ranked by their cell's
+// per-capita wealth; we take the wealthiest 10% of the population (pro-rating the cell that crosses
+// the 10% mark, since wealth is even within a cell) and return their share of the market's total
+// (inhabited) wealth. ~10% when wealth is spread evenly; climbs toward 100% when a few people sit on
+// a disproportionate share of the raw-rich land. (Drives the insurrection mechanic — see sim/tick.)
 export function wealthConcentration(s: WorldState, m: Market): number {
-  if (m.foodPotentialThisCycle <= 0 || m.population <= 0) return 0;
-  // Gather the market's populated cells with their raw yield (skip empties — concentrated raw
-  // swarms, the case this measures, have few populated cells, so this stays cheap).
-  const cells: Array<{ pop: number; raw: number }> = [];
+  if (m.population <= 0) return 0;
+  const cells: Array<{ pop: number; wealth: number; perCap: number }> = [];
+  let totalWealth = 0;
   for (const c of m.cells) {
     const pop = s.cellPopulation[c];
-    if (pop > 0) cells.push({ pop, raw: s.rawYield[c] + s.rawStock[c] });
+    if (pop <= 0) continue;
+    const wealth = s.rawYield[c] + s.rawStock[c];
+    cells.push({ pop, wealth, perCap: wealth / pop });
+    totalWealth += wealth;
   }
-  cells.sort((a, b) => b.raw - a.raw); // highest raw-yielding cells first
-  const threshold = CONFIG.WEALTH_TOP_FRACTION * m.population; // 10% of the population
-  let popElite = 0;
+  if (totalWealth <= 0 || cells.length === 0) return 0;
+  cells.sort((a, b) => b.perCap - a.perCap); // wealthiest (per-capita) people first
+  const threshold = CONFIG.WEALTH_TOP_FRACTION * m.population; // top 10% of the population
+  let accPop = 0;
+  let accWealth = 0;
   for (const cell of cells) {
-    popElite += cell.pop;
-    if (popElite >= threshold) break;
+    const need = threshold - accPop;
+    if (need <= 0) break;
+    if (cell.pop <= need) {
+      accWealth += cell.wealth;
+      accPop += cell.pop;
+    } else {
+      accWealth += cell.wealth * (need / cell.pop); // partial cell: even per-capita within it
+      break;
+    }
   }
-  return (popElite / m.foodPotentialThisCycle) * 100;
+  return (accWealth / totalWealth) * 100;
 }
 
 export function refreshDerived(s: WorldState): void {

@@ -140,10 +140,23 @@ export const CONFIG = {
   OTHER_MARKETS_SHOWN: 5, // # of largest alive markets in the side panel (player + discovered rivals)
   EVENT_MARKET_SWING_FRAC: 0.5, // single-year ±pop swing of a top-5 discovered market that logs an event
 
-  // Wealth Concentration: the food-land the densest WEALTH_TOP_FRACTION of the population requires,
-  // as a % of the market's total food capacity. ~10% when the land comfortably feeds everyone;
-  // climbs past 100% when population is crammed far beyond what the land can support (imbalance).
+  // Wealth Concentration: the share of the market's wealth held by its wealthiest WEALTH_TOP_FRACTION
+  // (10%) of the population (top-decile/Gini-style share, [0,100]; ~10% when even, ->100% when a few
+  // hold most of the raw-rich land).
   WEALTH_TOP_FRACTION: 0.1,
+
+  // Insurrection: when wealth concentration is high enough, the player's market risks collapse.
+  // Probability/year is linearly interpolated from INSURRECTION_PROB_AT_THRESHOLD at
+  // INSURRECTION_THRESHOLD up to INSURRECTION_PROB_AT_MAX at 100%. When it fires, the market
+  // contracts (loses CONTRACT_MIN..MAX of its cells, keeping the top population centers). Warning
+  // cards fire each time concentration crosses a WARN_STEP boundary from WARN_FROM up to threshold.
+  INSURRECTION_THRESHOLD: 75, // wealth-concentration % at/above which insurrection risk begins
+  INSURRECTION_PROB_AT_THRESHOLD: 0.01, // per-year prob at the threshold (75%)
+  INSURRECTION_PROB_AT_MAX: 0.95, // per-year prob at 100% concentration
+  INSURRECTION_CONTRACT_MIN: 0.5, // min fraction of cells lost when it fires
+  INSURRECTION_CONTRACT_MAX: 0.85, // max fraction of cells lost
+  INSURRECTION_WARN_FROM: 55, // first warning threshold (%)
+  INSURRECTION_WARN_STEP: 5, // warn each +N% from WARN_FROM up to the insurrection threshold
 
   // turn
   YEARS_PER_TURN_OPTIONS: [10, 50, 250],
@@ -161,6 +174,7 @@ export const RNG_SALT = {
   CONFLICT: 7,
   AI: 8,
   BURST: 9,
+  INSURRECTION: 10,
 } as const;
 
 // Index 0 = baseline "(none)" (ext = 1.0). Index 1 = Hoe. 45 real technologies.
